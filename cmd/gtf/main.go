@@ -51,16 +51,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Direct jump: gtf <name> (no config needed)
+	if len(args) == 1 && !strings.HasPrefix(args[0], "-") {
+		handleDirectJump(repoRoot, args[0])
+		return
+	}
+
 	cfg, err := config.Load(repoRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load config: %v\n", err)
 		cfg = config.DefaultConfig()
-	}
-
-	// Direct jump: gtf <name>
-	if len(args) == 1 && !strings.HasPrefix(args[0], "-") {
-		handleDirectJump(repoRoot, args[0])
-		return
 	}
 
 	// Launch TUI

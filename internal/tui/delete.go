@@ -49,12 +49,20 @@ func (m deleteModel) Update(msg tea.Msg) (deleteModel, tea.Cmd) {
 
 func (m deleteModel) doDelete() tea.Cmd {
 	return func() tea.Msg {
-		err := gitpkg.RemoveWorktree(m.repoRoot, m.worktree.Path, true)
+		// Try non-force first; fall back to force
+		err := gitpkg.RemoveWorktree(m.repoRoot, m.worktree.Path, false)
 		if err != nil {
-			return deleteDoneMsg{err: err}
+			err = gitpkg.RemoveWorktree(m.repoRoot, m.worktree.Path, true)
+			if err != nil {
+				return deleteDoneMsg{err: err}
+			}
 		}
 		if m.deleteBranch && m.worktree.Branch != "" {
-			err = gitpkg.DeleteBranch(m.repoRoot, m.worktree.Branch, true)
+			// Try non-force first for branch too
+			err = gitpkg.DeleteBranch(m.repoRoot, m.worktree.Branch, false)
+			if err != nil {
+				err = gitpkg.DeleteBranch(m.repoRoot, m.worktree.Branch, true)
+			}
 		}
 		return deleteDoneMsg{err: err}
 	}

@@ -284,10 +284,15 @@ func (m createModel) doCreate() tea.Cmd {
 			return createDoneMsg{err: err}
 		}
 
-		copyFiles(m.repoRoot, wtPath, m.cfg.CopyFiles)
-		runHooks(wtPath, m.cfg.PostCreateHooks)
+		var warnings []string
+		warnings = append(warnings, copyFiles(m.repoRoot, wtPath, m.cfg.CopyFiles)...)
+		warnings = append(warnings, runHooks(wtPath, m.cfg.PostCreateHooks)...)
 
-		return createDoneMsg{wtPath: wtPath}
+		var warnErr error
+		if len(warnings) > 0 {
+			warnErr = fmt.Errorf("warnings: %s", strings.Join(warnings, "; "))
+		}
+		return createDoneMsg{wtPath: wtPath, err: warnErr}
 	}
 }
 

@@ -125,10 +125,11 @@ func CreateWorktree(dir, path, branch string, newBranch bool) error {
 }
 
 func RemoveWorktree(dir, path string, force bool) error {
-	args := []string{"worktree", "remove", path}
+	args := []string{"worktree", "remove"}
 	if force {
 		args = append(args, "--force")
 	}
+	args = append(args, path)
 	_, err := runGit(dir, args...)
 	return err
 }

@@ -134,13 +134,13 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case viewDelete:
 			m.del, cmd = m.del.Update(msg)
 		case viewSettings:
+			if msg.String() == "esc" && !m.settings.editing && m.settings.saveMode == 0 {
+				m.view = viewList
+				return m, loadWorktrees(m.repoRoot, m.cwd)
+			}
 			m.settings, cmd = m.settings.Update(msg)
 		case viewPrune:
 			m.prune, cmd = m.prune.Update(msg)
-		}
-		if msg.String() == "esc" && m.view != viewCreate {
-			m.view = viewList
-			return m, loadWorktrees(m.repoRoot, m.cwd)
 		}
 		return m, cmd
 	}
