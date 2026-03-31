@@ -76,6 +76,44 @@ func ListWorktrees(dir string) ([]Worktree, error) {
 	return worktrees, nil
 }
 
+func ListLocalBranches(dir string) ([]string, error) {
+	out, err := runGit(dir, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+func ListRemoteBranches(dir string) ([]string, error) {
+	out, err := runGit(dir, "for-each-ref", "--format=%(refname:short)", "refs/remotes/")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	var branches []string
+	for _, b := range strings.Split(out, "\n") {
+		if strings.HasSuffix(b, "/HEAD") {
+			continue
+		}
+		branches = append(branches, b)
+	}
+	return branches, nil
+}
+
+func DeleteBranch(dir, branch string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	_, err := runGit(dir, "branch", flag, branch)
+	return err
+}
+
 func MarkCurrent(worktrees []Worktree, dir string) {
 	resolved, _ := filepath.EvalSymlinks(dir)
 	for i := range worktrees {

@@ -99,3 +99,32 @@ func TestListWorktrees_Multiple(t *testing.T) {
 		t.Error("expected to find feature worktree")
 	}
 }
+
+func TestListLocalBranches(t *testing.T) {
+	dir := setupTestRepo(t)
+	for _, b := range []string{"feature-a", "feature-b"} {
+		cmd := exec.Command("git", "branch", b)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("branch create failed: %v\n%s", err, out)
+		}
+	}
+	branches, err := ListLocalBranches(dir)
+	if err != nil {
+		t.Fatalf("ListLocalBranches: %v", err)
+	}
+	if len(branches) < 3 {
+		t.Errorf("expected at least 3 branches, got %d: %v", len(branches), branches)
+	}
+}
+
+func TestListRemoteBranches(t *testing.T) {
+	dir := setupTestRepo(t)
+	branches, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches: %v", err)
+	}
+	if len(branches) != 0 {
+		t.Errorf("expected 0 remote branches, got %d", len(branches))
+	}
+}
