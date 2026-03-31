@@ -228,3 +228,53 @@ func TestStash(t *testing.T) {
 		t.Error("expected clean after stash")
 	}
 }
+
+func TestPruneWorktrees(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	wtPath := filepath.Join(t.TempDir(), "prunable-wt")
+	exec.Command("git", "-C", dir, "worktree", "add", "-b", "prunable", wtPath).Run()
+	os.RemoveAll(wtPath)
+
+	err := PruneWorktrees(dir)
+	if err != nil {
+		t.Fatalf("PruneWorktrees: %v", err)
+	}
+
+	trees, _ := ListWorktrees(dir)
+	for _, wt := range trees {
+		if wt.Branch == "prunable" {
+			t.Error("prunable worktree still in list after prune")
+		}
+	}
+}
+
+func TestStaleBranches(t *testing.T) {
+	dir := setupTestRepo(t)
+	stale, err := StaleBranches(dir)
+	if err != nil {
+		t.Fatalf("StaleBranches: %v", err)
+	}
+	if len(stale) != 0 {
+		t.Errorf("expected 0 stale branches, got %d", len(stale))
+	}
+}
+
+func TestStaleWorktrees(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	wtPath := filepath.Join(t.TempDir(), "stale-wt")
+	exec.Command("git", "-C", dir, "worktree", "add", "-b", "stale-branch", wtPath).Run()
+	os.RemoveAll(wtPath)
+
+	stale, err := StaleWorktrees(dir)
+	if err != nil {
+		t.Fatalf("StaleWorktrees: %v", err)
+	}
+	if len(stale) != 1 {
+		t.Fatalf("expected 1 stale worktree, got %d", len(stale))
+	}
+	if stale[0].Branch != "stale-branch" {
+		t.Errorf("expected stale branch 'stale-branch', got %q", stale[0].Branch)
+	}
+}

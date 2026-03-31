@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -157,4 +158,48 @@ func MarkCurrent(worktrees []Worktree, dir string) {
 			worktrees[i].IsCurrent = true
 		}
 	}
+}
+
+func PruneWorktrees(dir string) error {
+	_, err := runGit(dir, "worktree", "prune")
+	return err
+}
+
+func StaleWorktrees(dir string) ([]Worktree, error) {
+	trees, err := ListWorktrees(dir)
+	if err != nil {
+		return nil, err
+	}
+	var stale []Worktree
+	for _, wt := range trees {
+		if wt.IsMain {
+			continue
+		}
+		if _, err := os.Stat(wt.Path); os.IsNotExist(err) {
+			stale = append(stale, wt)
+		}
+	}
+	return stale, nil
+}
+
+func StaleBranches(dir string) ([]string, error) {
+	out, err := runGit(dir, "branch", "-vv")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	var stale []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, ": gone]") {
+			line = strings.TrimSpace(line)
+			line = strings.TrimPrefix(line, "* ")
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				stale = append(stale, parts[0])
+			}
+		}
+	}
+	return stale, nil
 }
