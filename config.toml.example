@@ -1,0 +1,16 @@
+# git-treeflow configuration
+# Place at ~/.config/git-treeflow/config.toml (global)
+# or .git-treeflow.toml in your repo root (per-repo override)
+
+# Where to create worktrees relative to the repo root
+# Available variables: {repoName}, {worktreeName}, {branchName}, {date}
+worktree_path = "../{repoName}.worktrees/{worktreeName}"
+
+# Files/globs to copy from the main repo into new worktrees
+copy_files = [".env*"]
+
+# Commands to run after creating a worktree (executed in order, from the new worktree dir)
+# post_create_hooks = [
+#     "npm install",
+#     "cp .env.example .env.local",
+# ]
