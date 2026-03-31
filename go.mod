@@ -1,4 +1,4 @@
-module git-treeflow
+module github.com/cKreymborg/git-treeflow
 
 go 1.25.0
 

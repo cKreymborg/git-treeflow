@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"git-treeflow/internal/config"
-	gitpkg "git-treeflow/internal/git"
+	"github.com/cKreymborg/git-treeflow/internal/config"
+	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"

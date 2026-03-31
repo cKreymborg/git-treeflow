@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"git-treeflow/internal/config"
+	"github.com/cKreymborg/git-treeflow/internal/config"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

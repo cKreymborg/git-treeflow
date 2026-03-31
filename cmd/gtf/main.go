@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"git-treeflow/internal/config"
-	gitpkg "git-treeflow/internal/git"
-	"git-treeflow/internal/shell"
-	"git-treeflow/internal/tui"
+	"github.com/cKreymborg/git-treeflow/internal/config"
+	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
+	"github.com/cKreymborg/git-treeflow/internal/shell"
+	"github.com/cKreymborg/git-treeflow/internal/tui"
 
 	"github.com/sahilm/fuzzy"
 )

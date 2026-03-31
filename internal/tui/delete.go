@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	gitpkg "git-treeflow/internal/git"
+	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
