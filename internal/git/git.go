@@ -114,6 +114,41 @@ func DeleteBranch(dir, branch string, force bool) error {
 	return err
 }
 
+func CreateWorktree(dir, path, branch string, newBranch bool) error {
+	if newBranch {
+		_, err := runGit(dir, "worktree", "add", "-b", branch, path)
+		return err
+	}
+	_, err := runGit(dir, "worktree", "add", path, branch)
+	return err
+}
+
+func RemoveWorktree(dir, path string, force bool) error {
+	args := []string{"worktree", "remove", path}
+	if force {
+		args = append(args, "--force")
+	}
+	_, err := runGit(dir, args...)
+	return err
+}
+
+func HasUncommittedChanges(dir string) (bool, error) {
+	out, err := runGit(dir, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return out != "", nil
+}
+
+func Stash(dir, message string) error {
+	args := []string{"stash", "push"}
+	if message != "" {
+		args = append(args, "-m", message)
+	}
+	_, err := runGit(dir, args...)
+	return err
+}
+
 func MarkCurrent(worktrees []Worktree, dir string) {
 	resolved, _ := filepath.EvalSymlinks(dir)
 	for i := range worktrees {

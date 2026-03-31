@@ -1,6 +1,7 @@
 package git
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -126,5 +127,104 @@ func TestListRemoteBranches(t *testing.T) {
 	}
 	if len(branches) != 0 {
 		t.Errorf("expected 0 remote branches, got %d", len(branches))
+	}
+}
+
+func TestCreateAndRemoveWorktree(t *testing.T) {
+	dir := setupTestRepo(t)
+	wtPath := filepath.Join(t.TempDir(), "new-wt")
+
+	err := CreateWorktree(dir, wtPath, "new-branch", true)
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	trees, _ := ListWorktrees(dir)
+	found := false
+	for _, wt := range trees {
+		if wt.Branch == "new-branch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("worktree not found after creation")
+	}
+
+	err = RemoveWorktree(dir, wtPath, false)
+	if err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+
+	trees, _ = ListWorktrees(dir)
+	for _, wt := range trees {
+		if wt.Branch == "new-branch" {
+			t.Error("worktree still exists after removal")
+		}
+	}
+}
+
+func TestCreateWorktreeExistingBranch(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	cmd := exec.Command("git", "branch", "existing-branch")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("branch create failed: %v\n%s", err, out)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "existing-wt")
+	err := CreateWorktree(dir, wtPath, "existing-branch", false)
+	if err != nil {
+		t.Fatalf("CreateWorktree existing: %v", err)
+	}
+
+	trees, _ := ListWorktrees(dir)
+	found := false
+	for _, wt := range trees {
+		if wt.Branch == "existing-branch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("worktree for existing branch not found")
+	}
+}
+
+func TestHasUncommittedChanges(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	dirty, err := HasUncommittedChanges(dir)
+	if err != nil {
+		t.Fatalf("HasUncommittedChanges: %v", err)
+	}
+	if dirty {
+		t.Error("expected clean repo")
+	}
+
+	os.WriteFile(filepath.Join(dir, "dirty.txt"), []byte("dirty"), 0644)
+
+	dirty, err = HasUncommittedChanges(dir)
+	if err != nil {
+		t.Fatalf("HasUncommittedChanges: %v", err)
+	}
+	if !dirty {
+		t.Error("expected dirty repo")
+	}
+}
+
+func TestStash(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	os.WriteFile(filepath.Join(dir, "stash-me.txt"), []byte("data"), 0644)
+	exec.Command("git", "-C", dir, "add", "stash-me.txt").Run()
+
+	err := Stash(dir, "test stash")
+	if err != nil {
+		t.Fatalf("Stash: %v", err)
+	}
+
+	dirty, _ := HasUncommittedChanges(dir)
+	if dirty {
+		t.Error("expected clean after stash")
 	}
 }
