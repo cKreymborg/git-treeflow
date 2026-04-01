@@ -157,37 +157,31 @@ func splitAndTrim(s string) []string {
 
 func (m settingsModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Settings"))
-	b.WriteString("\n\n")
 
 	for i, f := range m.fields {
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "▸ "
+		if i > 0 {
+			b.WriteString("\n")
 		}
 
 		if m.editing && i == m.cursor {
-			b.WriteString(fmt.Sprintf("%s%s:\n    %s\n", cursor, f.label, m.input.View()))
+			b.WriteString(accentStyle.Render(f.label) + "\n")
+			b.WriteString("  " + m.input.View())
+		} else if i == m.cursor {
+			b.WriteString(selectedStyle.Render("▸ " + f.label) + "\n")
+			b.WriteString("  " + normalStyle.Render(f.value))
 		} else {
-			label := fmt.Sprintf("%s%s: %s", cursor, f.label, f.value)
-			if i == m.cursor {
-				b.WriteString(selectedStyle.Render(label))
-			} else {
-				b.WriteString(dimStyle.Render(label))
-			}
-			b.WriteString("\n")
+			b.WriteString(dimStyle.Render("  " + f.label) + "\n")
+			b.WriteString("  " + dimStyle.Render(f.value))
 		}
+		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
-
 	if m.saveMode == 1 {
-		b.WriteString("Save to: " + selectedStyle.Render("g") + " global • " + selectedStyle.Render("r") + " repo • esc cancel")
+		b.WriteString("\n" + normalStyle.Render("Save to: ") +
+			accentStyle.Render("g") + normalStyle.Render(" global  ") +
+			accentStyle.Render("r") + normalStyle.Render(" repo"))
 	} else if m.saved {
-		b.WriteString(successStyle.Render("Saved!") + "\n")
-		b.WriteString(dimStyle.Render("enter edit • w save • esc back"))
-	} else {
-		b.WriteString(dimStyle.Render("enter edit • w save • esc back"))
+		b.WriteString("\n" + successStyle.Render("Saved!"))
 	}
 
 	if m.err != nil {
@@ -195,4 +189,14 @@ func (m settingsModel) View() string {
 	}
 
 	return b.String()
+}
+
+func (m settingsModel) FooterHints() []footerKey {
+	if m.saveMode == 1 {
+		return []footerKey{{"g", "global"}, {"r", "repo"}, {"esc", "cancel"}}
+	}
+	if m.editing {
+		return []footerKey{{"enter", "save"}, {"esc", "cancel"}}
+	}
+	return []footerKey{{"enter", "edit"}, {"w", "save"}, {"esc", "back"}}
 }

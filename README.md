@@ -72,7 +72,7 @@ Press `c` to start the create flow:
 3. Select or enter the branch name (with fuzzy search for existing branches)
 4. Confirm
 
-New worktrees are created at `../{repoName}.worktrees/{worktreeName}` by default. Files matching `.env*` are automatically copied from the main repo.
+New worktrees are created at `../{repoName}.worktree/{worktreeName}` by default. Files matching `.env*` are automatically copied from the main repo.
 
 ## Configuration
 
@@ -86,7 +86,7 @@ Per-repo settings override global settings. Edit from the TUI via `s`, or direct
 ```toml
 # Where to create worktrees (relative to repo root)
 # Variables: {repoName}, {worktreeName}, {branchName}, {date}
-worktree_path = "../{repoName}.worktrees/{worktreeName}"
+worktree_path = "../{repoName}.worktree/{worktreeName}"
 
 # Files/globs to copy into new worktrees
 copy_files = [".env*"]

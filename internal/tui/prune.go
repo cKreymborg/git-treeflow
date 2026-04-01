@@ -81,43 +81,49 @@ func (m pruneModel) doPrune() tea.Cmd {
 
 func (m pruneModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Prune"))
-	b.WriteString("\n\n")
 
 	if m.loading {
-		b.WriteString("Scanning for stale worktrees and branches...")
+		b.WriteString(dimStyle.Render("Scanning for stale worktrees and branches…"))
 		return b.String()
 	}
 
 	if m.err != nil {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("Error: %v", m.err)))
-		b.WriteString("\n\n" + dimStyle.Render("esc to go back"))
 		return b.String()
 	}
 
 	hasStale := len(m.staleWorktrees) > 0 || len(m.staleBranches) > 0
 	if !hasStale {
 		b.WriteString(successStyle.Render("Nothing to prune — all clean!"))
-		b.WriteString("\n\n" + dimStyle.Render("esc to go back"))
 		return b.String()
 	}
 
 	if len(m.staleWorktrees) > 0 {
-		b.WriteString("Stale worktrees (directory missing):\n")
+		b.WriteString(dimStyle.Render("Stale worktrees") + "\n\n")
 		for _, wt := range m.staleWorktrees {
-			b.WriteString(fmt.Sprintf("  • %s (%s)\n", errorStyle.Render(wt.Branch), dimStyle.Render(wt.Path)))
+			b.WriteString("  " + errorStyle.Render(wt.Branch) + "  " + dimStyle.Render(wt.Path) + "\n")
 		}
-		b.WriteString("\n")
+		if len(m.staleBranches) > 0 {
+			b.WriteString("\n")
+		}
 	}
 
 	if len(m.staleBranches) > 0 {
-		b.WriteString("Branches with deleted remote:\n")
+		b.WriteString(dimStyle.Render("Orphan branches") + "\n\n")
 		for _, branch := range m.staleBranches {
-			b.WriteString(fmt.Sprintf("  • %s\n", errorStyle.Render(branch)))
+			b.WriteString("  " + errorStyle.Render(branch) + "\n")
 		}
-		b.WriteString("\n")
 	}
 
-	b.WriteString(dimStyle.Render("y prune all • esc cancel"))
 	return b.String()
+}
+
+func (m pruneModel) FooterHints() []footerKey {
+	if m.loading {
+		return nil
+	}
+	if m.err != nil || (len(m.staleWorktrees) == 0 && len(m.staleBranches) == 0) {
+		return []footerKey{{"esc", "back"}}
+	}
+	return []footerKey{{"y", "prune all"}, {"esc", "cancel"}}
 }

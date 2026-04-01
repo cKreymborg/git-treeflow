@@ -298,42 +298,33 @@ func (m createModel) doCreate() tea.Cmd {
 
 func (m createModel) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Create Worktree"))
-	b.WriteString("\n\n")
 
 	switch m.step {
 	case stepName:
-		b.WriteString("Worktree name:\n")
+		b.WriteString(dimStyle.Render("Worktree name") + "\n\n")
 		b.WriteString(m.nameInput.View())
-		b.WriteString("\n\n" + dimStyle.Render("enter to continue • esc to cancel"))
 
 	case stepBranchMode:
-		b.WriteString(fmt.Sprintf("Worktree: %s\n\n", selectedStyle.Render(m.worktreeName)))
-		b.WriteString("Branch mode:\n\n")
+		b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
+		b.WriteString(dimStyle.Render("Branch mode") + "\n\n")
 		modes := []string{"Create new branch", "Checkout local branch", "Checkout remote branch"}
 		for i, mode := range modes {
-			cursor := "  "
 			if i == m.modeCursor {
-				cursor = "▸ "
-			}
-			if i == m.modeCursor {
-				b.WriteString(selectedStyle.Render(cursor + mode))
+				b.WriteString(selectedStyle.Render(" ◉ " + mode))
 			} else {
-				b.WriteString(dimStyle.Render(cursor + mode))
+				b.WriteString(dimStyle.Render(" ○ " + mode))
 			}
 			b.WriteString("\n")
 		}
-		b.WriteString("\n" + dimStyle.Render("j/k navigate • enter select • esc back"))
 
 	case stepBranchName:
-		b.WriteString(fmt.Sprintf("Worktree: %s\n", selectedStyle.Render(m.worktreeName)))
-		b.WriteString("New branch name:\n")
+		b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
+		b.WriteString(dimStyle.Render("New branch name") + "\n\n")
 		b.WriteString(m.branchInput.View())
-		b.WriteString("\n\n" + dimStyle.Render("enter to continue • esc back"))
 
 	case stepBranchSelect:
-		b.WriteString(fmt.Sprintf("Worktree: %s\n", selectedStyle.Render(m.worktreeName)))
-		b.WriteString("Select branch:\n")
+		b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
+		b.WriteString(dimStyle.Render("Select branch") + "\n\n")
 		b.WriteString(m.searchInput.View())
 		b.WriteString("\n\n")
 		if len(m.filtered) == 0 {
@@ -344,38 +335,31 @@ func (m createModel) View() string {
 				limit = len(m.filtered)
 			}
 			for i := 0; i < limit; i++ {
-				cursor := "  "
 				if i == m.branchCursor {
-					cursor = "▸ "
-				}
-				if i == m.branchCursor {
-					b.WriteString(selectedStyle.Render(cursor + m.filtered[i]))
+					b.WriteString(selectedStyle.Render(" ▸ " + m.filtered[i]))
 				} else {
-					b.WriteString(dimStyle.Render(cursor + m.filtered[i]))
+					b.WriteString(dimStyle.Render("   " + m.filtered[i]))
 				}
 				b.WriteString("\n")
 			}
 			if len(m.filtered) > limit {
-				b.WriteString(dimStyle.Render(fmt.Sprintf("  ... and %d more", len(m.filtered)-limit)))
+				b.WriteString(dimStyle.Render(fmt.Sprintf("   … and %d more", len(m.filtered)-limit)))
 			}
 		}
-		b.WriteString("\n" + dimStyle.Render("ctrl+j/k navigate • enter select • esc back"))
 
 	case stepConfirm:
-		b.WriteString("Confirm creation:\n\n")
-		b.WriteString(fmt.Sprintf("  Worktree:  %s\n", selectedStyle.Render(m.worktreeName)))
-		b.WriteString(fmt.Sprintf("  Branch:    %s\n", selectedStyle.Render(m.branchName)))
+		b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
+		b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
 		modeStr := "new"
 		if m.branchMode == branchLocal {
 			modeStr = "local"
 		} else if m.branchMode == branchRemote {
 			modeStr = "remote"
 		}
-		b.WriteString(fmt.Sprintf("  Mode:      %s\n", dimStyle.Render(modeStr)))
-		b.WriteString("\n" + dimStyle.Render("enter/y confirm • esc back"))
+		b.WriteString(dimStyle.Render("Mode") + "       " + dimStyle.Render(modeStr))
 
 	case stepCreating:
-		b.WriteString("Creating worktree...")
+		b.WriteString(dimStyle.Render("Creating worktree…"))
 	}
 
 	if m.err != nil {
@@ -383,4 +367,21 @@ func (m createModel) View() string {
 	}
 
 	return b.String()
+}
+
+func (m createModel) FooterHints() []footerKey {
+	switch m.step {
+	case stepName:
+		return []footerKey{{"enter", "continue"}, {"esc", "cancel"}}
+	case stepBranchMode:
+		return []footerKey{{"j/k", "navigate"}, {"enter", "select"}, {"esc", "back"}}
+	case stepBranchName:
+		return []footerKey{{"enter", "continue"}, {"esc", "back"}}
+	case stepBranchSelect:
+		return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "back"}}
+	case stepConfirm:
+		return []footerKey{{"enter", "confirm"}, {"esc", "back"}}
+	default:
+		return nil
+	}
 }

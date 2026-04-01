@@ -16,7 +16,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		WorktreePath: "../{repoName}.worktrees/{worktreeName}",
+		WorktreePath: "../{repoName}.worktree/{worktreeName}",
 		CopyFiles:    []string{".env*"},
 	}
 }

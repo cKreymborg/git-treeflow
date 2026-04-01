@@ -53,7 +53,7 @@ func TestLoadFromFile_NotFound(t *testing.T) {
 
 func TestMerge(t *testing.T) {
 	global := Config{
-		WorktreePath:    "../{repoName}.worktrees/{worktreeName}",
+		WorktreePath:    "../{repoName}.worktree/{worktreeName}",
 		CopyFiles:       []string{".env"},
 		PostCreateHooks: []string{"make setup"},
 	}
@@ -64,7 +64,7 @@ func TestMerge(t *testing.T) {
 	if len(merged.CopyFiles) != 2 {
 		t.Errorf("expected repo copy_files to win, got %v", merged.CopyFiles)
 	}
-	if merged.WorktreePath != "../{repoName}.worktrees/{worktreeName}" {
+	if merged.WorktreePath != "../{repoName}.worktree/{worktreeName}" {
 		t.Errorf("expected global worktree_path, got %q", merged.WorktreePath)
 	}
 	if len(merged.PostCreateHooks) != 1 {
@@ -73,7 +73,7 @@ func TestMerge(t *testing.T) {
 }
 
 func TestExpandPath(t *testing.T) {
-	tmpl := "../{repoName}.worktrees/{worktreeName}"
+	tmpl := "../{repoName}.worktree/{worktreeName}"
 	vars := map[string]string{
 		"repoName":     "my-app",
 		"worktreeName": "feature-x",
@@ -81,7 +81,7 @@ func TestExpandPath(t *testing.T) {
 		"date":         "2026-03-31",
 	}
 	result := ExpandPath(tmpl, vars)
-	expected := "../my-app.worktrees/feature-x"
+	expected := "../my-app.worktree/feature-x"
 	if result != expected {
 		t.Errorf("ExpandPath = %q, want %q", result, expected)
 	}

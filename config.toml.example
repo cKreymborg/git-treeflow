@@ -4,7 +4,7 @@
 
 # Where to create worktrees relative to the repo root
 # Available variables: {repoName}, {worktreeName}, {branchName}, {date}
-worktree_path = "../{repoName}.worktrees/{worktreeName}"
+worktree_path = "../{repoName}.worktree/{worktreeName}"
 
 # Files/globs to copy from the main repo into new worktrees
 copy_files = [".env*"]

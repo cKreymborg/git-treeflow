@@ -114,7 +114,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 type stashDoneMsg struct{ err error }
 
 func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Help toggle works from list view
 	if msg.String() == "?" && m.view == viewList {
 		m.showHelp = !m.showHelp
 		return m, nil
@@ -125,7 +124,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Delegate keys to sub-views when not on list
 	if m.view != viewList {
 		var cmd tea.Cmd
 		switch m.view {
@@ -145,7 +143,6 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// List view keys
 	switch {
 	case key.Matches(msg, listKeys.Quit):
 		return m, tea.Quit
@@ -174,6 +171,8 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewPrune
 		m.prune = newPruneModel(m.repoRoot)
 		return m, m.prune.Init()
+	case key.Matches(msg, listKeys.ToggleView):
+		m.list = m.list.cycleDisplayMode()
 	case key.Matches(msg, listKeys.Settings):
 		m.view = viewSettings
 		m.settings = newSettingsModel(m.cfg, m.repoRoot)
@@ -209,48 +208,103 @@ func (m AppModel) handleSwitch() (tea.Model, tea.Cmd) {
 }
 
 func (m AppModel) View() string {
-	if m.showHelp {
-		return m.helpView()
-	}
-
 	var content string
-	switch m.view {
-	case viewList:
-		content = m.list.View(m.width)
-	case viewCreate:
-		content = m.create.View()
-	case viewDelete:
-		content = m.del.View()
-	case viewSettings:
-		content = m.settings.View()
-	case viewPrune:
-		content = m.prune.View()
+	var title string
+	var footer []footerKey
+
+	if m.showHelp {
+		content = m.helpContent()
+		title = "Keybindings"
+		footer = []footerKey{{"any key", "close"}}
+	} else {
+		switch m.view {
+		case viewList:
+			content = m.list.View(m.panelInnerWidth())
+			title = "Existing Worktrees"
+			footer = []footerKey{
+				{"enter", "switch"}, {"c", "create"}, {"d", "delete"},
+				{"p", "prune"}, {"v", "switch view"}, {"s", "settings"},
+				{"?", "help"}, {"q", "quit"},
+			}
+		case viewCreate:
+			content = m.create.View()
+			title = "Create Worktree"
+			footer = m.create.FooterHints()
+		case viewDelete:
+			content = m.del.View(m.panelInnerWidth())
+			title = "Delete Worktree"
+			footer = m.del.FooterHints()
+		case viewSettings:
+			content = m.settings.View()
+			title = "Settings"
+			footer = m.settings.FooterHints()
+		case viewPrune:
+			content = m.prune.View()
+			title = "Prune"
+			footer = m.prune.FooterHints()
+		}
 	}
 
 	if m.err != nil {
-		content += "\n" + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
+		content += "\n\n" + errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
-	statusBar := statusBarStyle.Render("? help • c create • d delete • p prune • s settings • q quit")
+	pw := m.panelWidth()
 
-	return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
+	var sections []string
+	if m.view == viewList && !m.showHelp {
+		sections = append(sections, "", renderLogo(), "")
+	} else {
+		sections = append(sections, "")
+	}
+	sections = append(sections, renderPanel(title, content, pw))
+	sections = append(sections, renderFooter(footer))
+
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func (m AppModel) helpView() string {
-	help := titleStyle.Render("Keybindings") + "\n\n"
-	help += "  j/↓     move down\n"
-	help += "  k/↑     move up\n"
-	help += "  g       jump to top\n"
-	help += "  G       jump to bottom\n"
-	help += "  enter   switch to worktree\n"
-	help += "  c       create worktree\n"
-	help += "  d       delete worktree\n"
-	help += "  p       prune stale worktrees\n"
-	help += "  s       settings\n"
-	help += "  ?       toggle help\n"
-	help += "  q/esc   quit / back\n"
-	help += "\n" + dimStyle.Render("Press any key to close")
-	return help
+func (m AppModel) helpContent() string {
+	keys := []struct{ key, desc string }{
+		{"j / ↓", "Move down"},
+		{"k / ↑", "Move up"},
+		{"g", "Jump to top"},
+		{"G", "Jump to bottom"},
+		{"enter", "Switch to worktree"},
+		{"c", "Create worktree"},
+		{"d", "Delete worktree"},
+		{"p", "Prune stale worktrees"},
+		{"s", "Settings"},
+		{"v", "Toggle view (name / branch / both)"},
+		{"?", "Toggle help"},
+		{"q / esc", "Quit / back"},
+	}
+
+	var lines []string
+	for _, k := range keys {
+		lines = append(lines,
+			accentStyle.Render(fmt.Sprintf("  %-12s", k.key))+normalStyle.Render(k.desc))
+	}
+
+	result := ""
+	for i, line := range lines {
+		if i > 0 {
+			result += "\n"
+		}
+		result += line
+	}
+	return result
+}
+
+func (m AppModel) panelWidth() int {
+	w := m.width
+	if w == 0 {
+		w = 80
+	}
+	return w
+}
+
+func (m AppModel) panelInnerWidth() int {
+	return m.panelWidth() - 6
 }
 
 func RunApp(repoRoot, cwd string, cfg config.Config) (string, error) {
