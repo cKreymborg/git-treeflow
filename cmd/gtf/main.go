@@ -13,6 +13,9 @@ import (
 	"github.com/sahilm/fuzzy"
 )
 
+// Set by GoReleaser via ldflags
+var version = "dev"
+
 func main() {
 	args := os.Args[1:]
 
@@ -35,7 +38,7 @@ func main() {
 
 	// Handle --version
 	if len(args) == 1 && (args[0] == "--version" || args[0] == "-v") {
-		fmt.Println("git-treeflow v0.1.0")
+		fmt.Println("git-treeflow " + version)
 		return
 	}
 

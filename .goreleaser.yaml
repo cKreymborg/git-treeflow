@@ -1,0 +1,47 @@
+version: 2
+
+project_name: gtf
+
+builds:
+  - main: ./cmd/gtf
+    binary: gtf
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+brews:
+  - repository:
+      owner: cKreymborg
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    name: gtf
+    homepage: https://github.com/cKreymborg/git-treeflow
+    description: A terminal UI for managing git worktrees
+    skip_upload: auto
+    install: |
+      bin.install "gtf"
+    test: |
+      system "#{bin}/gtf", "--version"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
