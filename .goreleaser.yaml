@@ -24,19 +24,19 @@ archives:
       - goos: windows
         format: zip
 
-brews:
-  - repository:
-      owner: cKreymborg
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    name: gtf
-    homepage: https://github.com/cKreymborg/git-treeflow
-    description: A terminal UI for managing git worktrees
-    skip_upload: auto
-    install: |
-      bin.install "gtf"
-    test: |
-      system "#{bin}/gtf", "--version"
+# Uncomment after setting HOMEBREW_TAP_GITHUB_TOKEN secret:
+# brews:
+#   - repository:
+#       owner: cKreymborg
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     name: gtf
+#     homepage: https://github.com/cKreymborg/git-treeflow
+#     description: A terminal UI for managing git worktrees
+#     install: |
+#       bin.install "gtf"
+#     test: |
+#       system "#{bin}/gtf", "--version"
 
 changelog:
   sort: asc
