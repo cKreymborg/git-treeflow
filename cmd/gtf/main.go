@@ -67,7 +67,8 @@ func main() {
 	}
 
 	// Launch TUI
-	switchPath, err := tui.RunApp(repoRoot, cwd, version, cfg)
+	hasWrapper := os.Getenv("GTF_WRAPPER") == "1"
+	switchPath, err := tui.RunApp(repoRoot, cwd, version, hasWrapper, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

@@ -36,18 +36,20 @@ type AppModel struct {
 	cwd        string
 	cfg        config.Config
 	version    string
+	hasWrapper bool
 	SwitchPath string
 	err        error
 }
 
-func NewApp(repoRoot, cwd, version string, cfg config.Config) AppModel {
+func NewApp(repoRoot, cwd, version string, hasWrapper bool, cfg config.Config) AppModel {
 	return AppModel{
-		view:     viewList,
-		list:     newListModel(repoRoot),
-		repoRoot: repoRoot,
-		cwd:      cwd,
-		version:  version,
-		cfg:      cfg,
+		view:       viewList,
+		list:       newListModel(repoRoot),
+		repoRoot:   repoRoot,
+		cwd:        cwd,
+		version:    version,
+		hasWrapper: hasWrapper,
+		cfg:        cfg,
 	}
 }
 
@@ -262,6 +264,14 @@ func (m AppModel) View() string {
 	sections = append(sections, renderPanel(title, content, pw))
 	sections = append(sections, renderFooter(footer, pw))
 
+	if !m.hasWrapper && m.view == viewList && !m.showHelp {
+		hint := accentStyle.Render("  Tip: ") +
+			dimStyle.Render("Add ") +
+			normalStyle.Render("eval \"$(gtf --init zsh)\"") +
+			dimStyle.Render(" to your shell config to enable worktree switching")
+		sections = append(sections, "", hint)
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
@@ -309,8 +319,8 @@ func (m AppModel) panelInnerWidth() int {
 	return m.panelWidth() - 6
 }
 
-func RunApp(repoRoot, cwd, version string, cfg config.Config) (string, error) {
-	app := NewApp(repoRoot, cwd, version, cfg)
+func RunApp(repoRoot, cwd, version string, hasWrapper bool, cfg config.Config) (string, error) {
+	app := NewApp(repoRoot, cwd, version, hasWrapper, cfg)
 	p := tea.NewProgram(app, tea.WithOutput(os.Stderr), tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {

@@ -37,6 +37,12 @@ archives:
 #       bin.install "gtf"
 #     test: |
 #       system "#{bin}/gtf", "--version"
+#     caveats: |
+#       To enable worktree switching (cd), add to your shell config:
+#
+#         zsh:  eval "$(gtf --init zsh)"     # ~/.zshrc
+#         bash: eval "$(gtf --init bash)"    # ~/.bashrc
+#         fish: gtf --init fish | source     # ~/.config/fish/config.fish
 
 changelog:
   sort: asc

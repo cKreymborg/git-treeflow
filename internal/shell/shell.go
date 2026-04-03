@@ -4,7 +4,7 @@ import "fmt"
 
 const bashZshInit = `gtf() {
     local result
-    result=$(command gtf "$@")
+    result=$(GTF_WRAPPER=1 command gtf "$@")
     local exit_code=$?
     if [ $exit_code -eq 0 ] && [ -n "$result" ] && [ -d "$result" ]; then
         cd "$result" || return
@@ -15,7 +15,7 @@ const bashZshInit = `gtf() {
 }`
 
 const fishInit = `function gtf
-    set -l result (command gtf $argv)
+    set -l result (env GTF_WRAPPER=1 command gtf $argv)
     set -l exit_code $status
     if test $exit_code -eq 0; and test -n "$result"; and test -d "$result"
         cd $result
