@@ -14,7 +14,7 @@ import (
 )
 
 // Set by GoReleaser via ldflags
-var version = "dev"
+var version = "0.1.0"
 
 func main() {
 	args := os.Args[1:]
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Launch TUI
-	switchPath, err := tui.RunApp(repoRoot, cwd, cfg)
+	switchPath, err := tui.RunApp(repoRoot, cwd, version, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

@@ -132,45 +132,43 @@ func gradientColor(t float64) string {
 
 func renderLogo() string {
 	lines := []string{
-		"▀█▀ █▀█ █▀▀ █▀▀ █▀▀ █   █▀█ █ █ █",
-		" █  █▀▄ ██▀ ██▀ █▀  █   █ █ █▄█▄█",
+		"▀█▀ █▀█ █▀▀ █▀▀ █▀▀ █   █▀█ █   █",
+		" █  █▀▄ █▀▀ █▀▀ █▀  █   █ █ █ █ █",
 		" ▀  ▀ ▀ ▀▀▀ ▀▀▀ ▀   ▀▀▀ ▀▀▀  ▀ ▀ ",
 	}
 
-	totalRows := len(lines)
+	artRows := len(lines)
 	maxCols := 0
 	for _, l := range lines {
 		if len([]rune(l)) > maxCols {
 			maxCols = len([]rune(l))
 		}
 	}
-
+	// Render main text rows with gradient
 	var rendered []string
 	for row, line := range lines {
 		runes := []rune(line)
 		var b strings.Builder
-		b.WriteString("  ") // left padding
+		b.WriteString("  ")
 		for col, r := range runes {
 			if r == ' ' {
 				b.WriteRune(' ')
 				continue
 			}
-			// Horizontal gradient with subtle vertical shift
 			colT := float64(col) / float64(maxCols-1)
-			rowT := float64(row) / float64(totalRows-1)
+			rowT := float64(row) / float64(artRows-1)
 			t := colT*0.85 + rowT*0.15
 			if t > 1 {
 				t = 1
 			}
-
-			hex := gradientColor(t)
 			b.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color(hex)).
+				Foreground(lipgloss.Color(gradientColor(t))).
 				Bold(true).
 				Render(string(r)))
 		}
 		rendered = append(rendered, b.String())
 	}
+
 	return strings.Join(rendered, "\n")
 }
 
@@ -221,17 +219,55 @@ func renderPanel(title, content string, width int) string {
 	return topBorder + "\n" + body.String() + bottomBorder
 }
 
-func renderFooter(keys []footerKey) string {
+func renderFooter(keys []footerKey, width int) string {
 	if len(keys) == 0 {
 		return ""
 	}
-	var parts []string
-	for _, k := range keys {
-		badge := keyBadgeStyle.Render(k.key)
-		desc := keyDescStyle.Render(k.desc)
-		parts = append(parts, badge+" "+desc)
+	if width <= 0 {
+		width = 80
 	}
-	return " " + strings.Join(parts, "  ")
+
+	// Pre-render each key pair
+	type rendered struct {
+		str      string
+		visWidth int
+	}
+	var items []rendered
+	for _, k := range keys {
+		s := keyBadgeStyle.Render(k.key) + " " + keyDescStyle.Render(k.desc)
+		items = append(items, rendered{str: s, visWidth: lipgloss.Width(s)})
+	}
+
+	gap := 2             // spaces between items
+	indent := 1          // left margin
+	maxLine := width - indent
+
+	var lines []string
+	lineWidth := 0
+	var line []string
+
+	for _, item := range items {
+		needed := item.visWidth
+		if len(line) > 0 {
+			needed += gap
+		}
+		if lineWidth+needed > maxLine && len(line) > 0 {
+			lines = append(lines, strings.Repeat(" ", indent)+strings.Join(line, "  "))
+			line = nil
+			lineWidth = 0
+		}
+		line = append(line, item.str)
+		if lineWidth == 0 {
+			lineWidth = item.visWidth
+		} else {
+			lineWidth += gap + item.visWidth
+		}
+	}
+	if len(line) > 0 {
+		lines = append(lines, strings.Repeat(" ", indent)+strings.Join(line, "  "))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func truncatePath(path string, maxWidth int) string {

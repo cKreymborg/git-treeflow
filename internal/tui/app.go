@@ -35,16 +35,18 @@ type AppModel struct {
 	repoRoot   string
 	cwd        string
 	cfg        config.Config
+	version    string
 	SwitchPath string
 	err        error
 }
 
-func NewApp(repoRoot, cwd string, cfg config.Config) AppModel {
+func NewApp(repoRoot, cwd, version string, cfg config.Config) AppModel {
 	return AppModel{
 		view:     viewList,
 		list:     newListModel(repoRoot),
 		repoRoot: repoRoot,
 		cwd:      cwd,
+		version:  version,
 		cfg:      cfg,
 	}
 }
@@ -223,7 +225,6 @@ func (m AppModel) View() string {
 			title = "Existing Worktrees"
 			footer = []footerKey{
 				{"enter", "switch"}, {"c", "create"}, {"d", "delete"},
-				{"p", "prune"}, {"v", "switch view"}, {"s", "settings"},
 				{"?", "help"}, {"q", "quit"},
 			}
 		case viewCreate:
@@ -253,12 +254,13 @@ func (m AppModel) View() string {
 
 	var sections []string
 	if m.view == viewList && !m.showHelp {
-		sections = append(sections, "", renderLogo(), "")
+		versionLine := dimStyle.Render("  v" + m.version)
+		sections = append(sections, "", renderLogo(), versionLine, "")
 	} else {
 		sections = append(sections, "")
 	}
 	sections = append(sections, renderPanel(title, content, pw))
-	sections = append(sections, renderFooter(footer))
+	sections = append(sections, renderFooter(footer, pw))
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
@@ -307,8 +309,8 @@ func (m AppModel) panelInnerWidth() int {
 	return m.panelWidth() - 6
 }
 
-func RunApp(repoRoot, cwd string, cfg config.Config) (string, error) {
-	app := NewApp(repoRoot, cwd, cfg)
+func RunApp(repoRoot, cwd, version string, cfg config.Config) (string, error) {
+	app := NewApp(repoRoot, cwd, version, cfg)
 	p := tea.NewProgram(app, tea.WithOutput(os.Stderr), tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
