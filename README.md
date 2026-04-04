@@ -12,6 +12,13 @@
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap ckreymborg/tap
+brew install gtf
+```
+
 ### From source (requires Go 1.21+)
 
 ```bash
