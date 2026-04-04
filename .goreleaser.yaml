@@ -24,25 +24,24 @@ archives:
       - goos: windows
         format: zip
 
-# Uncomment after setting HOMEBREW_TAP_GITHUB_TOKEN secret:
-# brews:
-#   - repository:
-#       owner: cKreymborg
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     name: gtf
-#     homepage: https://github.com/cKreymborg/git-treeflow
-#     description: A terminal UI for managing git worktrees
-#     install: |
-#       bin.install "gtf"
-#     test: |
-#       system "#{bin}/gtf", "--version"
-#     caveats: |
-#       To enable worktree switching (cd), add to your shell config:
-#
-#         zsh:  eval "$(gtf --init zsh)"     # ~/.zshrc
-#         bash: eval "$(gtf --init bash)"    # ~/.bashrc
-#         fish: gtf --init fish | source     # ~/.config/fish/config.fish
+brews:
+  - repository:
+      owner: cKreymborg
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    name: gtf
+    homepage: https://github.com/cKreymborg/git-treeflow
+    description: A terminal UI for managing git worktrees
+    install: |
+      bin.install "gtf"
+    test: |
+      system "#{bin}/gtf", "--version"
+    caveats: |
+      To enable worktree switching (cd), add to your shell config:
+
+        zsh:  eval "$(gtf --init zsh)"     # ~/.zshrc
+        bash: eval "$(gtf --init bash)"    # ~/.bashrc
+        fish: gtf --init fish | source     # ~/.config/fish/config.fish
 
 changelog:
   sort: asc
