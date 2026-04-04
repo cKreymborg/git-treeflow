@@ -1,6 +1,14 @@
-# git-treeflow
+<p align="center">
+  <img src="assets/treeflow-logo.png" alt="Treeflow" width="400">
+</p>
 
-A terminal UI for managing git worktrees, launched via `gtf`.
+<p align="center">
+  A terminal UI for managing git worktrees, launched via <code>gtf</code>.
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/treeflow-flow.gif" alt="Creating a worktree with gtf" width="700">
+</p>
 
 ## Installation
 
@@ -49,6 +57,8 @@ gtf --help       # Show help
 gtf --version    # Show version
 ```
 
+<img src="assets/screenshots/treeflow-1.png" alt="Worktree list view" width="700">
+
 ### TUI Keybindings
 
 | Key | Action |
@@ -71,6 +81,8 @@ Press `c` to start the create flow:
 2. Choose branch mode: new branch, local branch, or remote branch
 3. Select or enter the branch name (with fuzzy search for existing branches)
 4. Confirm
+
+<img src="assets/screenshots/treeflow-2.png" alt="Create worktree flow" width="700">
 
 New worktrees are created at `../{repoName}.worktree/{worktreeName}` by default. Files matching `.env*` are automatically copied from the main repo.
 
@@ -96,6 +108,8 @@ post_create_hooks = [
     "npm install",
 ]
 ```
+
+<img src="assets/screenshots/treeflow-3.png" alt="Settings view" width="700">
 
 ## License
 
