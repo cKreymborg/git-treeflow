@@ -51,6 +51,7 @@ func (m listModel) Update(msg tea.Msg) (listModel, tea.Cmd) {
 	case worktreesLoadedMsg:
 		m.worktrees = msg.worktrees
 		m.err = msg.err
+		m.cursor = 0
 	}
 	return m, nil
 }
