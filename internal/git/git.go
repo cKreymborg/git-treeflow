@@ -38,11 +38,7 @@ func MainWorktreeRoot(dir string) (string, error) {
 		return "", err
 	}
 	if !filepath.IsAbs(gitCommonDir) {
-		topLevel, err := RepoRoot(dir)
-		if err != nil {
-			return "", err
-		}
-		gitCommonDir = filepath.Join(topLevel, gitCommonDir)
+		gitCommonDir = filepath.Join(dir, gitCommonDir)
 	}
 	return filepath.Clean(filepath.Dir(gitCommonDir)), nil
 }
