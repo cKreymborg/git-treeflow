@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.2
+
+- Fix worktree creation path when running from inside a worktree — new worktrees are now always placed as siblings of the main repo, not the current worktree (#2)
+
 ## v0.2.1
 
 - Fix cursor disappearing after deleting the last worktree in the list (#1)
