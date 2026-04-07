@@ -254,10 +254,12 @@ func (m createModel) loadBranches(remote bool) tea.Cmd {
 
 func (m createModel) doCreate() tea.Cmd {
 	return func() tea.Msg {
-		repoName, err := gitpkg.RepoName(m.repoRoot)
+		mainRoot, err := gitpkg.MainWorktreeRoot(m.repoRoot)
 		if err != nil {
 			return createDoneMsg{err: err}
 		}
+
+		repoName := filepath.Base(mainRoot)
 
 		vars := map[string]string{
 			"repoName":     repoName,
@@ -267,7 +269,7 @@ func (m createModel) doCreate() tea.Cmd {
 		}
 
 		relPath := config.ExpandPath(m.cfg.WorktreePath, vars)
-		wtPath := filepath.Join(m.repoRoot, relPath)
+		wtPath := filepath.Join(mainRoot, relPath)
 		wtPath, _ = filepath.Abs(wtPath)
 
 		isNew := m.branchMode == branchNew
