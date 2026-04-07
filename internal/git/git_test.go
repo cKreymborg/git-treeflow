@@ -52,6 +52,40 @@ func TestRepoName(t *testing.T) {
 	}
 }
 
+func TestMainWorktreeRoot_FromMain(t *testing.T) {
+	dir := setupTestRepo(t)
+	root, err := MainWorktreeRoot(dir)
+	if err != nil {
+		t.Fatalf("MainWorktreeRoot: %v", err)
+	}
+	expected, _ := filepath.EvalSymlinks(dir)
+	got, _ := filepath.EvalSymlinks(root)
+	if got != expected {
+		t.Errorf("MainWorktreeRoot from main = %q, want %q", got, expected)
+	}
+}
+
+func TestMainWorktreeRoot_FromWorktree(t *testing.T) {
+	dir := setupTestRepo(t)
+	wtPath := filepath.Join(t.TempDir(), "secondary-wt")
+
+	cmd := exec.Command("git", "worktree", "add", "-b", "secondary", wtPath)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("worktree add failed: %v\n%s", err, out)
+	}
+
+	root, err := MainWorktreeRoot(wtPath)
+	if err != nil {
+		t.Fatalf("MainWorktreeRoot from worktree: %v", err)
+	}
+	expected, _ := filepath.EvalSymlinks(dir)
+	got, _ := filepath.EvalSymlinks(root)
+	if got != expected {
+		t.Errorf("MainWorktreeRoot from worktree = %q, want %q", got, expected)
+	}
+}
+
 func TestListWorktrees(t *testing.T) {
 	dir := setupTestRepo(t)
 	trees, err := ListWorktrees(dir)

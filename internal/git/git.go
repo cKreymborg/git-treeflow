@@ -32,6 +32,17 @@ func RepoRoot(dir string) (string, error) {
 	return runGit(dir, "rev-parse", "--show-toplevel")
 }
 
+func MainWorktreeRoot(dir string) (string, error) {
+	gitCommonDir, err := runGit(dir, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(gitCommonDir) {
+		gitCommonDir = filepath.Join(dir, gitCommonDir)
+	}
+	return filepath.Clean(filepath.Dir(gitCommonDir)), nil
+}
+
 func RepoName(dir string) (string, error) {
 	root, err := RepoRoot(dir)
 	if err != nil {
