@@ -34,24 +34,25 @@ const (
 )
 
 type createModel struct {
-	step           createStep
-	nameInput      textinput.Model
-	branchInput    textinput.Model
-	searchInput    textinput.Model
-	branchMode     branchMode
-	modeCursor     int
-	branches       []string
-	filtered       []string
-	branchCursor   int
-	repoRoot       string
-	cfg            config.Config
-	err            error
-	worktreeName   string
-	branchName     string
+	step               createStep
+	nameInput          textinput.Model
+	branchInput        textinput.Model
+	searchInput        textinput.Model
+	branchMode         branchMode
+	modeCursor         int
+	branches           []string
+	filtered           []string
+	branchCursor       int
+	repoRoot           string
+	cfg                config.Config
+	err                error
+	worktreeName       string
+	branchName         string
 	baseBranch         string // resolved default branch, or "" if detection failed/not applicable
 	baseLoading        bool   // true while DefaultBranch is being resolved
 	basePickerOpen     bool   // true while the base-branch picker overlay is shown on stepConfirm
 	baseBranchExplicit bool   // true once the user picks a base via the 'b' picker
+	branchesGen        int    // increments on each loadBranches dispatch so stale results can be ignored
 }
 
 type createDoneMsg struct {
@@ -62,6 +63,7 @@ type createDoneMsg struct {
 type branchesLoadedMsg struct {
 	branches []string
 	err      error
+	gen      int
 }
 
 type defaultBranchLoadedMsg struct {
@@ -97,8 +99,21 @@ func (m createModel) Init() tea.Cmd {
 func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case branchesLoadedMsg:
+		if msg.gen != m.branchesGen {
+			return m, nil
+		}
 		m.branches = msg.branches
-		m.filtered = msg.branches
+		query := m.searchInput.Value()
+		if query == "" {
+			m.filtered = msg.branches
+		} else {
+			matches := fuzzy.Find(query, msg.branches)
+			m.filtered = make([]string, len(matches))
+			for i, match := range matches {
+				m.filtered[i] = match.Str
+			}
+		}
+		m.branchCursor = 0
 		m.err = msg.err
 		return m, nil
 
@@ -193,10 +208,12 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			case branchLocal:
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
+				m.branchesGen++
 				return m, tea.Batch(textinput.Blink, m.loadBranches(false))
 			case branchRemote:
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
+				m.branchesGen++
 				return m, tea.Batch(textinput.Blink, m.loadBranches(true))
 			}
 		}
@@ -286,6 +303,7 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			m.branches = nil
 			m.filtered = nil
 			m.searchInput.Focus()
+			m.branchesGen++
 			return m, tea.Batch(textinput.Blink, m.loadBranches(false))
 		}
 		return m, nil
@@ -337,6 +355,7 @@ func (m createModel) handleBasePickerKey(msg tea.KeyMsg) (createModel, tea.Cmd) 
 }
 
 func (m createModel) loadBranches(remote bool) tea.Cmd {
+	gen := m.branchesGen
 	return func() tea.Msg {
 		var branches []string
 		var err error
@@ -345,7 +364,7 @@ func (m createModel) loadBranches(remote bool) tea.Cmd {
 		} else {
 			branches, err = gitpkg.ListLocalBranches(m.repoRoot)
 		}
-		return branchesLoadedMsg{branches: branches, err: err}
+		return branchesLoadedMsg{branches: branches, err: err, gen: gen}
 	}
 }
 
