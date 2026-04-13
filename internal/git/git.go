@@ -32,6 +32,26 @@ func RepoRoot(dir string) (string, error) {
 	return runGit(dir, "rev-parse", "--show-toplevel")
 }
 
+// DefaultBranch returns the repository's integration branch, preferring
+// origin/HEAD (if it resolves to a branch that exists locally), then local
+// "main", then local "master". Returns an error if none are found.
+func DefaultBranch(dir string) (string, error) {
+	if out, err := runGit(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		if candidate, ok := strings.CutPrefix(out, "origin/"); ok && candidate != "" {
+			if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+candidate); err == nil {
+				return candidate, nil
+			}
+		}
+	}
+	if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/main"); err == nil {
+		return "main", nil
+	}
+	if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/master"); err == nil {
+		return "master", nil
+	}
+	return "", fmt.Errorf("could not detect default branch: no origin/HEAD, and neither 'main' nor 'master' exists locally")
+}
+
 func MainWorktreeRoot(dir string) (string, error) {
 	gitCommonDir, err := runGit(dir, "rev-parse", "--git-common-dir")
 	if err != nil {
@@ -140,8 +160,20 @@ func ValidateBranchName(name string) error {
 	return nil
 }
 
-func CreateWorktree(dir, path, branch string, newBranch bool) error {
+// CreateWorktree creates a worktree at path.
+//
+//   - If newBranch is true and base != "":
+//     git worktree add -b <branch> <path> <base>
+//   - If newBranch is true and base == "":
+//     git worktree add -b <branch> <path>       (fallback to HEAD of dir)
+//   - If newBranch is false:
+//     git worktree add <path> <branch>          (base is ignored)
+func CreateWorktree(dir, path, branch, base string, newBranch bool) error {
 	if newBranch {
+		if base != "" {
+			_, err := runGit(dir, "worktree", "add", "-b", branch, path, base)
+			return err
+		}
 		_, err := runGit(dir, "worktree", "add", "-b", branch, path)
 		return err
 	}

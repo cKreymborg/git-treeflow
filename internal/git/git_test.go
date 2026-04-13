@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func setupTestRepo(t *testing.T) string {
 	dir := t.TempDir()
 
 	cmds := [][]string{
-		{"git", "init"},
+		{"git", "init", "-b", "master"},
 		{"git", "config", "user.email", "test@test.com"},
 		{"git", "config", "user.name", "Test"},
 		{"git", "commit", "--allow-empty", "-m", "init"},
@@ -168,7 +169,7 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	dir := setupTestRepo(t)
 	wtPath := filepath.Join(t.TempDir(), "new-wt")
 
-	err := CreateWorktree(dir, wtPath, "new-branch", true)
+	err := CreateWorktree(dir, wtPath, "new-branch", "", true)
 	if err != nil {
 		t.Fatalf("CreateWorktree: %v", err)
 	}
@@ -207,7 +208,7 @@ func TestCreateWorktreeExistingBranch(t *testing.T) {
 	}
 
 	wtPath := filepath.Join(t.TempDir(), "existing-wt")
-	err := CreateWorktree(dir, wtPath, "existing-branch", false)
+	err := CreateWorktree(dir, wtPath, "existing-branch", "", false)
 	if err != nil {
 		t.Fatalf("CreateWorktree existing: %v", err)
 	}
@@ -221,6 +222,110 @@ func TestCreateWorktreeExistingBranch(t *testing.T) {
 	}
 	if !found {
 		t.Error("worktree for existing branch not found")
+	}
+}
+
+func TestCreateWorktree_WithBase(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	masterSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse master: %v", err)
+	}
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "feature.txt"), []byte("feature"), 0644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	commitCmds := [][]string{
+		{"git", "add", "feature.txt"},
+		{"git", "commit", "-m", "feature commit"},
+	}
+	for _, args := range commitCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("commit cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	featureSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse feature: %v", err)
+	}
+	if featureSha == masterSha {
+		t.Fatalf("expected feature and master shas to differ, both were %q", masterSha)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "new-child-wt")
+	if err := CreateWorktree(dir, wtPath, "new-child", "master", true); err != nil {
+		t.Fatalf("CreateWorktree with base: %v", err)
+	}
+
+	childSha, err := runGit(dir, "rev-parse", "new-child")
+	if err != nil {
+		t.Fatalf("rev-parse new-child: %v", err)
+	}
+	if childSha != masterSha {
+		t.Errorf("new-child tip = %q, want %q (master), not %q (feature)", childSha, masterSha, featureSha)
+	}
+}
+
+func TestCreateWorktree_EmptyBaseFallsBackToHead(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "feature.txt"), []byte("feature"), 0644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	commitCmds := [][]string{
+		{"git", "add", "feature.txt"},
+		{"git", "commit", "-m", "feature commit"},
+	}
+	for _, args := range commitCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("commit cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	featureSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse feature: %v", err)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "child-of-head-wt")
+	if err := CreateWorktree(dir, wtPath, "child-of-head", "", true); err != nil {
+		t.Fatalf("CreateWorktree empty base: %v", err)
+	}
+
+	childSha, err := runGit(dir, "rev-parse", "child-of-head")
+	if err != nil {
+		t.Fatalf("rev-parse child-of-head: %v", err)
+	}
+	if childSha != featureSha {
+		t.Errorf("child-of-head tip = %q, want %q (feature HEAD)", childSha, featureSha)
 	}
 }
 
@@ -310,6 +415,152 @@ func TestStaleWorktrees(t *testing.T) {
 	}
 	if stale[0].Branch != "stale-branch" {
 		t.Errorf("expected stale branch 'stale-branch', got %q", stale[0].Branch)
+	}
+}
+
+func setupBareRemote(t *testing.T, branch string) string {
+	t.Helper()
+	remoteDir := t.TempDir()
+
+	seed := t.TempDir()
+	seedCmds := [][]string{
+		{"git", "init", "-b", branch},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, args := range seedCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = seed
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("seed cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	cmd := exec.Command("git", "init", "--bare", remoteDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bare init failed: %v\n%s", err, out)
+	}
+
+	pushCmd := exec.Command("git", "push", remoteDir, branch)
+	pushCmd.Dir = seed
+	if out, err := pushCmd.CombinedOutput(); err != nil {
+		t.Fatalf("push to bare failed: %v\n%s", err, out)
+	}
+
+	return remoteDir
+}
+
+func TestDefaultBranch_OriginHead(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+		{"git", "branch", "main", "origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "main" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "main")
+	}
+}
+
+func TestDefaultBranch_LocalMainFallback(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "branch", "main"},
+		{"git", "branch", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "main" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "main")
+	}
+}
+
+func TestDefaultBranch_LocalMasterFallback(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "master" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "master")
+	}
+}
+
+func TestDefaultBranch_NoMatch(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "foo"},
+		{"git", "branch", "-D", "master"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err == nil {
+		t.Errorf("DefaultBranch = %q, want error", got)
+	}
+	if !strings.Contains(err.Error(), "could not detect default branch") {
+		t.Fatalf("expected error message to mention 'could not detect default branch', got: %v", err)
+	}
+}
+
+func TestDefaultBranch_OriginHeadWithoutLocal(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "master" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "master")
 	}
 }
 

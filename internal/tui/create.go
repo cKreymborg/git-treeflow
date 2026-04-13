@@ -34,20 +34,25 @@ const (
 )
 
 type createModel struct {
-	step         createStep
-	nameInput    textinput.Model
-	branchInput  textinput.Model
-	searchInput  textinput.Model
-	branchMode   branchMode
-	modeCursor   int
-	branches     []string
-	filtered     []string
-	branchCursor int
-	repoRoot     string
-	cfg          config.Config
-	err          error
-	worktreeName string
-	branchName   string
+	step               createStep
+	nameInput          textinput.Model
+	branchInput        textinput.Model
+	searchInput        textinput.Model
+	branchMode         branchMode
+	modeCursor         int
+	branches           []string
+	filtered           []string
+	branchCursor       int
+	repoRoot           string
+	cfg                config.Config
+	err                error
+	worktreeName       string
+	branchName         string
+	baseBranch         string // resolved default branch, or "" if detection failed/not applicable
+	baseLoading        bool   // true while DefaultBranch is being resolved
+	basePickerOpen     bool   // true while the base-branch picker overlay is shown on stepConfirm
+	baseBranchExplicit bool   // true once the user picks a base via the 'b' picker
+	branchesGen        int    // increments on each loadBranches dispatch so stale results can be ignored
 }
 
 type createDoneMsg struct {
@@ -58,6 +63,12 @@ type createDoneMsg struct {
 type branchesLoadedMsg struct {
 	branches []string
 	err      error
+	gen      int
+}
+
+type defaultBranchLoadedMsg struct {
+	branch string
+	err    error
 }
 
 func newCreateModel(repoRoot string, cfg config.Config) createModel {
@@ -88,15 +99,38 @@ func (m createModel) Init() tea.Cmd {
 func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case branchesLoadedMsg:
+		if msg.gen != m.branchesGen {
+			return m, nil
+		}
 		m.branches = msg.branches
-		m.filtered = msg.branches
+		query := m.searchInput.Value()
+		if query == "" {
+			m.filtered = msg.branches
+		} else {
+			matches := fuzzy.Find(query, msg.branches)
+			m.filtered = make([]string, len(matches))
+			for i, match := range matches {
+				m.filtered[i] = match.Str
+			}
+		}
+		m.branchCursor = 0
 		m.err = msg.err
+		return m, nil
+
+	case defaultBranchLoadedMsg:
+		m.baseLoading = false
+		if !m.baseBranchExplicit {
+			m.baseBranch = msg.branch // "" if err != nil
+		}
 		return m, nil
 
 	case createDoneMsg:
 		return m, func() tea.Msg { return msg }
 
 	case tea.KeyMsg:
+		if m.basePickerOpen {
+			return m.handleBasePickerKey(msg)
+		}
 		if msg.String() == "esc" {
 			if m.step == stepName {
 				return m, func() tea.Msg { return createDoneMsg{} }
@@ -106,6 +140,8 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()
 				m.searchInput.Blur()
+				m.baseLoading = false
+				m.baseBranchExplicit = false
 			}
 			if m.step == stepName {
 				m.nameInput.Focus()
@@ -167,14 +203,17 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			case branchNew:
 				m.step = stepBranchName
 				m.branchInput.Focus()
-				return m, textinput.Blink
+				m.baseLoading = true
+				return m, tea.Batch(textinput.Blink, m.loadDefaultBranch())
 			case branchLocal:
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
+				m.branchesGen++
 				return m, tea.Batch(textinput.Blink, m.loadBranches(false))
 			case branchRemote:
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
+				m.branchesGen++
 				return m, tea.Batch(textinput.Blink, m.loadBranches(true))
 			}
 		}
@@ -217,12 +256,12 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 				m.searchInput.Blur()
 			}
 			return m, nil
-		case "ctrl+j", "ctrl+n":
+		case "ctrl+j", "ctrl+n", "down":
 			if m.branchCursor < len(m.filtered)-1 {
 				m.branchCursor++
 			}
 			return m, nil
-		case "ctrl+k", "ctrl+p":
+		case "ctrl+k", "ctrl+p", "up":
 			if m.branchCursor > 0 {
 				m.branchCursor--
 			}
@@ -247,8 +286,25 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 	case stepConfirm:
 		switch msg.String() {
 		case "enter", "y":
+			// Silent swallow: detection is sub-perceptual (<50ms) and
+			// the (detecting…) indicator on the confirm view gives visual feedback.
+			if m.baseLoading && m.branchMode == branchNew {
+				return m, nil
+			}
 			m.step = stepCreating
 			return m, m.doCreate()
+		case "b":
+			if m.branchMode != branchNew {
+				return m, nil
+			}
+			m.basePickerOpen = true
+			m.searchInput.SetValue("")
+			m.branchCursor = 0
+			m.branches = nil
+			m.filtered = nil
+			m.searchInput.Focus()
+			m.branchesGen++
+			return m, tea.Batch(textinput.Blink, m.loadBranches(false))
 		}
 		return m, nil
 	}
@@ -256,7 +312,50 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m createModel) handleBasePickerKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.basePickerOpen = false
+		m.searchInput.Blur()
+		return m, nil
+	case "enter":
+		if len(m.filtered) > 0 {
+			m.baseBranch = m.filtered[m.branchCursor]
+			m.baseBranchExplicit = true
+			m.basePickerOpen = false
+			m.searchInput.Blur()
+		}
+		return m, nil
+	case "ctrl+j", "ctrl+n", "down":
+		if m.branchCursor < len(m.filtered)-1 {
+			m.branchCursor++
+		}
+		return m, nil
+	case "ctrl+k", "ctrl+p", "up":
+		if m.branchCursor > 0 {
+			m.branchCursor--
+		}
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		query := m.searchInput.Value()
+		if query == "" {
+			m.filtered = m.branches
+		} else {
+			matches := fuzzy.Find(query, m.branches)
+			m.filtered = make([]string, len(matches))
+			for i, match := range matches {
+				m.filtered[i] = match.Str
+			}
+		}
+		m.branchCursor = 0
+		return m, cmd
+	}
+}
+
 func (m createModel) loadBranches(remote bool) tea.Cmd {
+	gen := m.branchesGen
 	return func() tea.Msg {
 		var branches []string
 		var err error
@@ -265,7 +364,14 @@ func (m createModel) loadBranches(remote bool) tea.Cmd {
 		} else {
 			branches, err = gitpkg.ListLocalBranches(m.repoRoot)
 		}
-		return branchesLoadedMsg{branches: branches, err: err}
+		return branchesLoadedMsg{branches: branches, err: err, gen: gen}
+	}
+}
+
+func (m createModel) loadDefaultBranch() tea.Cmd {
+	return func() tea.Msg {
+		branch, err := gitpkg.DefaultBranch(m.repoRoot)
+		return defaultBranchLoadedMsg{branch: branch, err: err}
 	}
 }
 
@@ -298,7 +404,11 @@ func (m createModel) doCreate() tea.Cmd {
 			}
 		}
 
-		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, isNew)
+		base := ""
+		if isNew {
+			base = m.baseBranch
+		}
+		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, base, isNew)
 		if err != nil {
 			return createDoneMsg{err: err}
 		}
@@ -367,15 +477,52 @@ func (m createModel) View() string {
 		}
 
 	case stepConfirm:
-		b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
-		b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
-		modeStr := "new"
-		if m.branchMode == branchLocal {
-			modeStr = "local"
-		} else if m.branchMode == branchRemote {
-			modeStr = "remote"
+		if m.basePickerOpen {
+			b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
+			b.WriteString(dimStyle.Render("Select base branch") + "\n\n")
+			b.WriteString(m.searchInput.View())
+			b.WriteString("\n\n")
+			if len(m.filtered) == 0 {
+				b.WriteString(dimStyle.Render("No branches found"))
+			} else {
+				limit := 10
+				if len(m.filtered) < limit {
+					limit = len(m.filtered)
+				}
+				for i := 0; i < limit; i++ {
+					if i == m.branchCursor {
+						b.WriteString(selectedStyle.Render(" ▸ " + m.filtered[i]))
+					} else {
+						b.WriteString(dimStyle.Render("   " + m.filtered[i]))
+					}
+					b.WriteString("\n")
+				}
+				if len(m.filtered) > limit {
+					b.WriteString(dimStyle.Render(fmt.Sprintf("   … and %d more", len(m.filtered)-limit)))
+				}
+			}
+		} else {
+			b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
+			b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
+			if m.branchMode == branchNew {
+				var baseStr string
+				if m.baseLoading {
+					baseStr = dimStyle.Render("(detecting…)")
+				} else if m.baseBranch != "" {
+					baseStr = accentStyle.Render(m.baseBranch)
+				} else {
+					baseStr = dimStyle.Render("(current HEAD)")
+				}
+				b.WriteString(dimStyle.Render("Base") + "       " + baseStr + "\n")
+			}
+			modeStr := "new"
+			if m.branchMode == branchLocal {
+				modeStr = "local"
+			} else if m.branchMode == branchRemote {
+				modeStr = "remote"
+			}
+			b.WriteString(dimStyle.Render("Mode") + "       " + dimStyle.Render(modeStr))
 		}
-		b.WriteString(dimStyle.Render("Mode") + "       " + dimStyle.Render(modeStr))
 
 	case stepCreating:
 		b.WriteString(dimStyle.Render("Creating worktree…"))
@@ -397,8 +544,14 @@ func (m createModel) FooterHints() []footerKey {
 	case stepBranchName:
 		return []footerKey{{"enter", "continue"}, {"esc", "back"}}
 	case stepBranchSelect:
-		return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "back"}}
+		return []footerKey{{"↑/↓", "navigate"}, {"enter", "select"}, {"esc", "back"}}
 	case stepConfirm:
+		if m.basePickerOpen {
+			return []footerKey{{"↑/↓", "navigate"}, {"enter", "select"}, {"esc", "close"}}
+		}
+		if m.branchMode == branchNew {
+			return []footerKey{{"enter", "confirm"}, {"b", "change base"}, {"esc", "back"}}
+		}
 		return []footerKey{{"enter", "confirm"}, {"esc", "back"}}
 	default:
 		return nil
