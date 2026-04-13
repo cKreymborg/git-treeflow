@@ -48,6 +48,8 @@ type createModel struct {
 	err          error
 	worktreeName string
 	branchName   string
+	baseBranch   string // resolved default branch, or "" if detection failed/not applicable
+	baseLoading  bool   // true while DefaultBranch is being resolved
 }
 
 type createDoneMsg struct {
@@ -58,6 +60,11 @@ type createDoneMsg struct {
 type branchesLoadedMsg struct {
 	branches []string
 	err      error
+}
+
+type defaultBranchLoadedMsg struct {
+	branch string
+	err    error
 }
 
 func newCreateModel(repoRoot string, cfg config.Config) createModel {
@@ -91,6 +98,11 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 		m.branches = msg.branches
 		m.filtered = msg.branches
 		m.err = msg.err
+		return m, nil
+
+	case defaultBranchLoadedMsg:
+		m.baseBranch = msg.branch // "" if err != nil
+		m.baseLoading = false
 		return m, nil
 
 	case createDoneMsg:
@@ -167,7 +179,8 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			case branchNew:
 				m.step = stepBranchName
 				m.branchInput.Focus()
-				return m, textinput.Blink
+				m.baseLoading = true
+				return m, tea.Batch(textinput.Blink, m.loadDefaultBranch())
 			case branchLocal:
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
@@ -247,6 +260,9 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 	case stepConfirm:
 		switch msg.String() {
 		case "enter", "y":
+			if m.baseLoading && m.branchMode == branchNew {
+				return m, nil
+			}
 			m.step = stepCreating
 			return m, m.doCreate()
 		}
@@ -266,6 +282,13 @@ func (m createModel) loadBranches(remote bool) tea.Cmd {
 			branches, err = gitpkg.ListLocalBranches(m.repoRoot)
 		}
 		return branchesLoadedMsg{branches: branches, err: err}
+	}
+}
+
+func (m createModel) loadDefaultBranch() tea.Cmd {
+	return func() tea.Msg {
+		branch, err := gitpkg.DefaultBranch(m.repoRoot)
+		return defaultBranchLoadedMsg{branch: branch, err: err}
 	}
 }
 
@@ -298,7 +321,11 @@ func (m createModel) doCreate() tea.Cmd {
 			}
 		}
 
-		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, "", isNew)
+		base := ""
+		if isNew {
+			base = m.baseBranch
+		}
+		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, base, isNew)
 		if err != nil {
 			return createDoneMsg{err: err}
 		}
@@ -369,6 +396,17 @@ func (m createModel) View() string {
 	case stepConfirm:
 		b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
 		b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
+		if m.branchMode == branchNew {
+			var baseStr string
+			if m.baseLoading {
+				baseStr = dimStyle.Render("(detecting…)")
+			} else if m.baseBranch != "" {
+				baseStr = accentStyle.Render(m.baseBranch)
+			} else {
+				baseStr = dimStyle.Render("(current HEAD)")
+			}
+			b.WriteString(dimStyle.Render("Base") + "       " + baseStr + "\n")
+		}
 		modeStr := "new"
 		if m.branchMode == branchLocal {
 			modeStr = "local"
