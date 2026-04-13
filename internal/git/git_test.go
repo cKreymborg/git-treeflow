@@ -13,7 +13,7 @@ func setupTestRepo(t *testing.T) string {
 	dir := t.TempDir()
 
 	cmds := [][]string{
-		{"git", "init"},
+		{"git", "init", "-b", "master"},
 		{"git", "config", "user.email", "test@test.com"},
 		{"git", "config", "user.name", "Test"},
 		{"git", "commit", "--allow-empty", "-m", "init"},
