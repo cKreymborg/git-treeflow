@@ -48,9 +48,10 @@ type createModel struct {
 	err            error
 	worktreeName   string
 	branchName     string
-	baseBranch     string // resolved default branch, or "" if detection failed/not applicable
-	baseLoading    bool   // true while DefaultBranch is being resolved
-	basePickerOpen bool   // true while the base-branch picker overlay is shown on stepConfirm
+	baseBranch         string // resolved default branch, or "" if detection failed/not applicable
+	baseLoading        bool   // true while DefaultBranch is being resolved
+	basePickerOpen     bool   // true while the base-branch picker overlay is shown on stepConfirm
+	baseBranchExplicit bool   // true once the user picks a base via the 'b' picker
 }
 
 type createDoneMsg struct {
@@ -102,8 +103,10 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 		return m, nil
 
 	case defaultBranchLoadedMsg:
-		m.baseBranch = msg.branch // "" if err != nil
 		m.baseLoading = false
+		if !m.baseBranchExplicit {
+			m.baseBranch = msg.branch // "" if err != nil
+		}
 		return m, nil
 
 	case createDoneMsg:
@@ -123,6 +126,7 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 				m.branchInput.Blur()
 				m.searchInput.Blur()
 				m.baseLoading = false
+				m.baseBranchExplicit = false
 			}
 			if m.step == stepName {
 				m.nameInput.Focus()
@@ -299,6 +303,7 @@ func (m createModel) handleBasePickerKey(msg tea.KeyMsg) (createModel, tea.Cmd) 
 	case "enter":
 		if len(m.filtered) > 0 {
 			m.baseBranch = m.filtered[m.branchCursor]
+			m.baseBranchExplicit = true
 			m.basePickerOpen = false
 			m.searchInput.Blur()
 		}
