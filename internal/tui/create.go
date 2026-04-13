@@ -298,7 +298,7 @@ func (m createModel) doCreate() tea.Cmd {
 			}
 		}
 
-		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, isNew)
+		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, "", isNew)
 		if err != nil {
 			return createDoneMsg{err: err}
 		}

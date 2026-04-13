@@ -160,8 +160,20 @@ func ValidateBranchName(name string) error {
 	return nil
 }
 
-func CreateWorktree(dir, path, branch string, newBranch bool) error {
+// CreateWorktree creates a worktree at path.
+//
+//   - If newBranch is true and base != "":
+//     git worktree add -b <branch> <path> <base>
+//   - If newBranch is true and base == "":
+//     git worktree add -b <branch> <path>       (fallback to HEAD of dir)
+//   - If newBranch is false:
+//     git worktree add <path> <branch>          (base is ignored)
+func CreateWorktree(dir, path, branch, base string, newBranch bool) error {
 	if newBranch {
+		if base != "" {
+			_, err := runGit(dir, "worktree", "add", "-b", branch, path, base)
+			return err
+		}
 		_, err := runGit(dir, "worktree", "add", "-b", branch, path)
 		return err
 	}

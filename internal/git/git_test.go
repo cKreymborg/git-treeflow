@@ -169,7 +169,7 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	dir := setupTestRepo(t)
 	wtPath := filepath.Join(t.TempDir(), "new-wt")
 
-	err := CreateWorktree(dir, wtPath, "new-branch", true)
+	err := CreateWorktree(dir, wtPath, "new-branch", "", true)
 	if err != nil {
 		t.Fatalf("CreateWorktree: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestCreateWorktreeExistingBranch(t *testing.T) {
 	}
 
 	wtPath := filepath.Join(t.TempDir(), "existing-wt")
-	err := CreateWorktree(dir, wtPath, "existing-branch", false)
+	err := CreateWorktree(dir, wtPath, "existing-branch", "", false)
 	if err != nil {
 		t.Fatalf("CreateWorktree existing: %v", err)
 	}
@@ -222,6 +222,110 @@ func TestCreateWorktreeExistingBranch(t *testing.T) {
 	}
 	if !found {
 		t.Error("worktree for existing branch not found")
+	}
+}
+
+func TestCreateWorktree_WithBase(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	masterSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse master: %v", err)
+	}
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "feature.txt"), []byte("feature"), 0644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	commitCmds := [][]string{
+		{"git", "add", "feature.txt"},
+		{"git", "commit", "-m", "feature commit"},
+	}
+	for _, args := range commitCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("commit cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	featureSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse feature: %v", err)
+	}
+	if featureSha == masterSha {
+		t.Fatalf("expected feature and master shas to differ, both were %q", masterSha)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "new-child-wt")
+	if err := CreateWorktree(dir, wtPath, "new-child", "master", true); err != nil {
+		t.Fatalf("CreateWorktree with base: %v", err)
+	}
+
+	childSha, err := runGit(dir, "rev-parse", "new-child")
+	if err != nil {
+		t.Fatalf("rev-parse new-child: %v", err)
+	}
+	if childSha != masterSha {
+		t.Errorf("new-child tip = %q, want %q (master), not %q (feature)", childSha, masterSha, featureSha)
+	}
+}
+
+func TestCreateWorktree_EmptyBaseFallsBackToHead(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "feature.txt"), []byte("feature"), 0644); err != nil {
+		t.Fatalf("write feature.txt: %v", err)
+	}
+	commitCmds := [][]string{
+		{"git", "add", "feature.txt"},
+		{"git", "commit", "-m", "feature commit"},
+	}
+	for _, args := range commitCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("commit cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	featureSha, err := runGit(dir, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse feature: %v", err)
+	}
+
+	wtPath := filepath.Join(t.TempDir(), "child-of-head-wt")
+	if err := CreateWorktree(dir, wtPath, "child-of-head", "", true); err != nil {
+		t.Fatalf("CreateWorktree empty base: %v", err)
+	}
+
+	childSha, err := runGit(dir, "rev-parse", "child-of-head")
+	if err != nil {
+		t.Fatalf("rev-parse child-of-head: %v", err)
+	}
+	if childSha != featureSha {
+		t.Errorf("child-of-head tip = %q, want %q (feature HEAD)", childSha, featureSha)
 	}
 }
 
