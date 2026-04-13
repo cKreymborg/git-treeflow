@@ -32,6 +32,24 @@ func RepoRoot(dir string) (string, error) {
 	return runGit(dir, "rev-parse", "--show-toplevel")
 }
 
+func DefaultBranch(dir string) (string, error) {
+	if out, err := runGit(dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		candidate := strings.TrimPrefix(out, "origin/")
+		if candidate != "" {
+			if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/"+candidate); err == nil {
+				return candidate, nil
+			}
+		}
+	}
+	if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/main"); err == nil {
+		return "main", nil
+	}
+	if _, err := runGit(dir, "show-ref", "--verify", "--quiet", "refs/heads/master"); err == nil {
+		return "master", nil
+	}
+	return "", fmt.Errorf("could not detect default branch")
+}
+
 func MainWorktreeRoot(dir string) (string, error) {
 	gitCommonDir, err := runGit(dir, "rev-parse", "--git-common-dir")
 	if err != nil {

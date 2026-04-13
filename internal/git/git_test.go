@@ -313,6 +313,149 @@ func TestStaleWorktrees(t *testing.T) {
 	}
 }
 
+func setupBareRemote(t *testing.T, branch string) string {
+	t.Helper()
+	remoteDir := t.TempDir()
+
+	seed := t.TempDir()
+	seedCmds := [][]string{
+		{"git", "init", "-b", branch},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, args := range seedCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = seed
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("seed cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	cmd := exec.Command("git", "init", "--bare", remoteDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bare init failed: %v\n%s", err, out)
+	}
+
+	pushCmd := exec.Command("git", "push", remoteDir, branch)
+	pushCmd.Dir = seed
+	if out, err := pushCmd.CombinedOutput(); err != nil {
+		t.Fatalf("push to bare failed: %v\n%s", err, out)
+	}
+
+	return remoteDir
+}
+
+func TestDefaultBranch_OriginHead(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+		{"git", "branch", "main", "origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "main" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "main")
+	}
+}
+
+func TestDefaultBranch_LocalMainFallback(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "branch", "main"},
+		{"git", "branch", "feature"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "main" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "main")
+	}
+}
+
+func TestDefaultBranch_LocalMasterFallback(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "master" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "master")
+	}
+}
+
+func TestDefaultBranch_NoMatch(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	setupCmds := [][]string{
+		{"git", "checkout", "-b", "foo"},
+		{"git", "branch", "-D", "master"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err == nil {
+		t.Errorf("DefaultBranch = %q, want error", got)
+	}
+}
+
+func TestDefaultBranch_OriginHeadWithoutLocal(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := DefaultBranch(dir)
+	if err != nil {
+		t.Fatalf("DefaultBranch: %v", err)
+	}
+	if got != "master" {
+		t.Errorf("DefaultBranch = %q, want %q", got, "master")
+	}
+}
+
 func TestValidateBranchName(t *testing.T) {
 	valid := []string{
 		"feature",
