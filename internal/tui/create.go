@@ -118,6 +118,7 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()
 				m.searchInput.Blur()
+				m.baseLoading = false
 			}
 			if m.step == stepName {
 				m.nameInput.Focus()
@@ -260,6 +261,8 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 	case stepConfirm:
 		switch msg.String() {
 		case "enter", "y":
+			// Silent swallow: detection is sub-perceptual (<50ms) and
+			// the (detecting…) indicator on the confirm view gives visual feedback.
 			if m.baseLoading && m.branchMode == branchNew {
 				return m, nil
 			}
