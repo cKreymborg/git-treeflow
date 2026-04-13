@@ -6,7 +6,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/charmbracelet/bubbles/spinner"
 )
+
+func newDefaultSpinner() spinner.Model {
+	return spinner.New(
+		spinner.WithSpinner(spinner.Dot),
+		spinner.WithStyle(selectedStyle),
+	)
+}
 
 func copyFiles(srcDir, dstDir string, patterns []string) []string {
 	var errs []string

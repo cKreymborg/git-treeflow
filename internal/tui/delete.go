@@ -24,12 +24,10 @@ type deleteDoneMsg struct {
 }
 
 func newDeleteModel(wt gitpkg.Worktree, repoRoot string) deleteModel {
-	s := spinner.New(spinner.WithSpinner(spinner.Dot),
-		spinner.WithStyle(selectedStyle))
 	return deleteModel{
 		worktree: wt,
 		repoRoot: repoRoot,
-		spinner:  s,
+		spinner:  newDefaultSpinner(),
 	}
 }
 

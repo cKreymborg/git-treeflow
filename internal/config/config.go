@@ -8,26 +8,36 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+const KeyAutoFetchRemoteBranches = "auto_fetch_remote_branches"
+
 type Config struct {
-	WorktreePath    string   `toml:"worktree_path"`
-	CopyFiles       []string `toml:"copy_files"`
-	PostCreateHooks []string `toml:"post_create_hooks"`
+	WorktreePath            string   `toml:"worktree_path"`
+	CopyFiles               []string `toml:"copy_files"`
+	PostCreateHooks         []string `toml:"post_create_hooks"`
+	AutoFetchRemoteBranches bool     `toml:"auto_fetch_remote_branches"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		WorktreePath: "../{repoName}.worktree/{worktreeName}",
-		CopyFiles:    []string{".env*"},
+		WorktreePath:            "../{repoName}.worktree/{worktreeName}",
+		CopyFiles:               []string{".env*"},
+		AutoFetchRemoteBranches: true,
 	}
 }
 
 func LoadFromFile(path string) (Config, error) {
-	var cfg Config
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, nil
-	}
-	_, err := toml.DecodeFile(path, &cfg)
+	cfg, _, err := loadFromFileWithMeta(path)
 	return cfg, err
+}
+
+func loadFromFileWithMeta(path string) (Config, toml.MetaData, error) {
+	var cfg Config
+	var meta toml.MetaData
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return cfg, meta, nil
+	}
+	meta, err := toml.DecodeFile(path, &cfg)
+	return cfg, meta, err
 }
 
 func GlobalConfigPath() string {
@@ -45,16 +55,16 @@ func RepoConfigPath(repoRoot string) string {
 
 func Load(repoRoot string) (Config, error) {
 	cfg := DefaultConfig()
-	global, err := LoadFromFile(GlobalConfigPath())
+	global, gMeta, err := loadFromFileWithMeta(GlobalConfigPath())
 	if err != nil {
 		return cfg, err
 	}
-	cfg = Merge(cfg, global)
-	repo, err := LoadFromFile(RepoConfigPath(repoRoot))
+	cfg = mergeWithMeta(cfg, global, gMeta)
+	repo, rMeta, err := loadFromFileWithMeta(RepoConfigPath(repoRoot))
 	if err != nil {
 		return cfg, err
 	}
-	cfg = Merge(cfg, repo)
+	cfg = mergeWithMeta(cfg, repo, rMeta)
 	return cfg, nil
 }
 
@@ -68,6 +78,16 @@ func Merge(base, override Config) Config {
 	}
 	if override.PostCreateHooks != nil {
 		result.PostCreateHooks = override.PostCreateHooks
+	}
+	return result
+}
+
+// mergeWithMeta layers override onto base, using meta to detect explicitly-set
+// bool fields whose Go zero value can't be distinguished from "unset".
+func mergeWithMeta(base, override Config, meta toml.MetaData) Config {
+	result := Merge(base, override)
+	if meta.IsDefined(KeyAutoFetchRemoteBranches) {
+		result.AutoFetchRemoteBranches = override.AutoFetchRemoteBranches
 	}
 	return result
 }

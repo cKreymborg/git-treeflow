@@ -87,6 +87,49 @@ func TestExpandPath(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_AutoFetchTrue(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AutoFetchRemoteBranches {
+		t.Error("expected AutoFetchRemoteBranches default true")
+	}
+}
+
+func TestLoad_AutoFetchOverrideFalse(t *testing.T) {
+	repoRoot := t.TempDir()
+	repoCfg := `auto_fetch_remote_branches = false` + "\n"
+	if err := os.WriteFile(filepath.Join(repoRoot, ".git-treeflow.toml"), []byte(repoCfg), 0644); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg, err := Load(repoRoot)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AutoFetchRemoteBranches {
+		t.Error("expected AutoFetchRemoteBranches=false from repo config to override default true")
+	}
+}
+
+func TestLoad_AutoFetchUnsetKeepsDefault(t *testing.T) {
+	repoRoot := t.TempDir()
+	repoCfg := `worktree_path = "../{repoName}.wt/{worktreeName}"` + "\n"
+	if err := os.WriteFile(filepath.Join(repoRoot, ".git-treeflow.toml"), []byte(repoCfg), 0644); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg, err := Load(repoRoot)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.AutoFetchRemoteBranches {
+		t.Error("expected AutoFetchRemoteBranches to remain true when repo config does not set it")
+	}
+}
+
 func TestSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
