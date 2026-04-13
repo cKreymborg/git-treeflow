@@ -166,9 +166,9 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.create = newCreateModel(m.repoRoot, m.cfg)
 		return m, m.create.Init()
 	case key.Matches(msg, listKeys.Delete):
+		m.err = nil
 		wt := m.list.selectedWorktree()
 		if wt != nil && !wt.IsMain {
-			m.err = nil
 			m.view = viewDelete
 			m.del = newDeleteModel(*wt, m.repoRoot)
 		}
@@ -191,6 +191,7 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m AppModel) handleSwitch() (tea.Model, tea.Cmd) {
+	m.err = nil
 	wt := m.list.selectedWorktree()
 	if wt == nil {
 		return m, nil
@@ -199,7 +200,6 @@ func (m AppModel) handleSwitch() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.err = nil
 	dirty, err := gitpkg.HasUncommittedChanges(m.cwd)
 	if err != nil {
 		m.err = err
