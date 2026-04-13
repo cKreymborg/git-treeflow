@@ -101,6 +101,7 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			if m.step == stepName {
 				return m, func() tea.Msg { return createDoneMsg{} }
 			}
+			m.err = nil
 			m.step--
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()
@@ -142,6 +143,11 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.nameInput, cmd = m.nameInput.Update(msg)
+			if val := m.nameInput.Value(); strings.Contains(val, " ") {
+				pos := m.nameInput.Position()
+				m.nameInput.SetValue(strings.ReplaceAll(val, " ", "-"))
+				m.nameInput.SetCursor(pos)
+			}
 			return m, cmd
 		}
 
@@ -181,13 +187,24 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			if val == "" {
 				return m, nil
 			}
+			if err := gitpkg.ValidateBranchName(val); err != nil {
+				m.err = err
+				return m, nil
+			}
+			m.err = nil
 			m.branchName = val
 			m.step = stepConfirm
 			m.branchInput.Blur()
 			return m, nil
 		default:
+			m.err = nil
 			var cmd tea.Cmd
 			m.branchInput, cmd = m.branchInput.Update(msg)
+			if val := m.branchInput.Value(); strings.Contains(val, " ") {
+				pos := m.branchInput.Position()
+				m.branchInput.SetValue(strings.ReplaceAll(val, " ", "-"))
+				m.branchInput.SetCursor(pos)
+			}
 			return m, cmd
 		}
 

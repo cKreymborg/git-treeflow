@@ -126,6 +126,20 @@ func DeleteBranch(dir, branch string, force bool) error {
 	return err
 }
 
+func ValidateBranchName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+	if strings.HasPrefix(name, "-") || name == "@" {
+		return fmt.Errorf("invalid branch name %q", name)
+	}
+	cmd := exec.Command("git", "check-ref-format", "refs/heads/"+name)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("invalid branch name %q", name)
+	}
+	return nil
+}
+
 func CreateWorktree(dir, path, branch string, newBranch bool) error {
 	if newBranch {
 		_, err := runGit(dir, "worktree", "add", "-b", branch, path)

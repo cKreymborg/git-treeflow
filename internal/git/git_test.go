@@ -312,3 +312,48 @@ func TestStaleWorktrees(t *testing.T) {
 		t.Errorf("expected stale branch 'stale-branch', got %q", stale[0].Branch)
 	}
 }
+
+func TestValidateBranchName(t *testing.T) {
+	valid := []string{
+		"feature",
+		"feature/foo",
+		"feature/foo-bar",
+		"release-1.0",
+		"user/name/topic",
+	}
+	for _, name := range valid {
+		if err := ValidateBranchName(name); err != nil {
+			t.Errorf("ValidateBranchName(%q) = %v, want nil", name, err)
+		}
+	}
+
+	invalid := []string{
+		"",
+		" ",
+		"has space",
+		"has~tilde",
+		"has^caret",
+		"has:colon",
+		"has?question",
+		"has*star",
+		"has[bracket",
+		"has\\backslash",
+		"..dots",
+		"double..dot",
+		"-leadingdash",
+		"--doubledash",
+		"-",
+		".leadingdot",
+		"trailing.",
+		"trailing.lock",
+		"ends/",
+		"//double",
+		"@",
+		"has@{sequence",
+	}
+	for _, name := range invalid {
+		if err := ValidateBranchName(name); err == nil {
+			t.Errorf("ValidateBranchName(%q) = nil, want error", name)
+		}
+	}
+}
