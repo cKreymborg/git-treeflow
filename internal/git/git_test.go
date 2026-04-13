@@ -307,6 +307,8 @@ func TestValidateBranchName(t *testing.T) {
 		"..dots",
 		"double..dot",
 		"-leadingdash",
+		"--doubledash",
+		"-",
 		".leadingdot",
 		"trailing.",
 		"trailing.lock",

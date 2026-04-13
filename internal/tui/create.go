@@ -101,6 +101,7 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			if m.step == stepName {
 				return m, func() tea.Msg { return createDoneMsg{} }
 			}
+			m.err = nil
 			m.step--
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()

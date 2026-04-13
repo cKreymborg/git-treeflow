@@ -119,7 +119,10 @@ func ValidateBranchName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("branch name cannot be empty")
 	}
-	cmd := exec.Command("git", "check-ref-format", "--allow-onelevel", name)
+	if strings.HasPrefix(name, "-") || name == "@" {
+		return fmt.Errorf("invalid branch name %q", name)
+	}
+	cmd := exec.Command("git", "check-ref-format", "refs/heads/"+name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("invalid branch name %q", name)
 	}
