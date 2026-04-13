@@ -239,12 +239,12 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 				m.searchInput.Blur()
 			}
 			return m, nil
-		case "ctrl+j", "ctrl+n":
+		case "ctrl+j", "ctrl+n", "down":
 			if m.branchCursor < len(m.filtered)-1 {
 				m.branchCursor++
 			}
 			return m, nil
-		case "ctrl+k", "ctrl+p":
+		case "ctrl+k", "ctrl+p", "up":
 			if m.branchCursor > 0 {
 				m.branchCursor--
 			}
@@ -308,12 +308,12 @@ func (m createModel) handleBasePickerKey(msg tea.KeyMsg) (createModel, tea.Cmd) 
 			m.searchInput.Blur()
 		}
 		return m, nil
-	case "ctrl+j", "ctrl+n":
+	case "ctrl+j", "ctrl+n", "down":
 		if m.branchCursor < len(m.filtered)-1 {
 			m.branchCursor++
 		}
 		return m, nil
-	case "ctrl+k", "ctrl+p":
+	case "ctrl+k", "ctrl+p", "up":
 		if m.branchCursor > 0 {
 			m.branchCursor--
 		}
@@ -525,10 +525,10 @@ func (m createModel) FooterHints() []footerKey {
 	case stepBranchName:
 		return []footerKey{{"enter", "continue"}, {"esc", "back"}}
 	case stepBranchSelect:
-		return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "back"}}
+		return []footerKey{{"↑/↓", "navigate"}, {"enter", "select"}, {"esc", "back"}}
 	case stepConfirm:
 		if m.basePickerOpen {
-			return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "close"}}
+			return []footerKey{{"↑/↓", "navigate"}, {"enter", "select"}, {"esc", "close"}}
 		}
 		if m.branchMode == branchNew {
 			return []footerKey{{"enter", "confirm"}, {"b", "change base"}, {"esc", "back"}}
