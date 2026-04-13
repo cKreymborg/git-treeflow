@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -427,6 +428,9 @@ func TestDefaultBranch_NoMatch(t *testing.T) {
 	got, err := DefaultBranch(dir)
 	if err == nil {
 		t.Errorf("DefaultBranch = %q, want error", got)
+	}
+	if !strings.Contains(err.Error(), "could not detect default branch") {
+		t.Fatalf("expected error message to mention 'could not detect default branch', got: %v", err)
 	}
 }
 
