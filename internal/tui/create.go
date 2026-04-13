@@ -34,22 +34,23 @@ const (
 )
 
 type createModel struct {
-	step         createStep
-	nameInput    textinput.Model
-	branchInput  textinput.Model
-	searchInput  textinput.Model
-	branchMode   branchMode
-	modeCursor   int
-	branches     []string
-	filtered     []string
-	branchCursor int
-	repoRoot     string
-	cfg          config.Config
-	err          error
-	worktreeName string
-	branchName   string
-	baseBranch   string // resolved default branch, or "" if detection failed/not applicable
-	baseLoading  bool   // true while DefaultBranch is being resolved
+	step           createStep
+	nameInput      textinput.Model
+	branchInput    textinput.Model
+	searchInput    textinput.Model
+	branchMode     branchMode
+	modeCursor     int
+	branches       []string
+	filtered       []string
+	branchCursor   int
+	repoRoot       string
+	cfg            config.Config
+	err            error
+	worktreeName   string
+	branchName     string
+	baseBranch     string // resolved default branch, or "" if detection failed/not applicable
+	baseLoading    bool   // true while DefaultBranch is being resolved
+	basePickerOpen bool   // true while the base-branch picker overlay is shown on stepConfirm
 }
 
 type createDoneMsg struct {
@@ -109,6 +110,9 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 		return m, func() tea.Msg { return msg }
 
 	case tea.KeyMsg:
+		if m.basePickerOpen {
+			return m.handleBasePickerKey(msg)
+		}
 		if msg.String() == "esc" {
 			if m.step == stepName {
 				return m, func() tea.Msg { return createDoneMsg{} }
@@ -268,11 +272,63 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			}
 			m.step = stepCreating
 			return m, m.doCreate()
+		case "b":
+			if m.branchMode != branchNew {
+				return m, nil
+			}
+			m.basePickerOpen = true
+			m.searchInput.SetValue("")
+			m.branchCursor = 0
+			m.branches = nil
+			m.filtered = nil
+			m.searchInput.Focus()
+			return m, tea.Batch(textinput.Blink, m.loadBranches(false))
 		}
 		return m, nil
 	}
 
 	return m, nil
+}
+
+func (m createModel) handleBasePickerKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.basePickerOpen = false
+		m.searchInput.Blur()
+		return m, nil
+	case "enter":
+		if len(m.filtered) > 0 {
+			m.baseBranch = m.filtered[m.branchCursor]
+			m.basePickerOpen = false
+			m.searchInput.Blur()
+		}
+		return m, nil
+	case "ctrl+j", "ctrl+n":
+		if m.branchCursor < len(m.filtered)-1 {
+			m.branchCursor++
+		}
+		return m, nil
+	case "ctrl+k", "ctrl+p":
+		if m.branchCursor > 0 {
+			m.branchCursor--
+		}
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		query := m.searchInput.Value()
+		if query == "" {
+			m.filtered = m.branches
+		} else {
+			matches := fuzzy.Find(query, m.branches)
+			m.filtered = make([]string, len(matches))
+			for i, match := range matches {
+				m.filtered[i] = match.Str
+			}
+		}
+		m.branchCursor = 0
+		return m, cmd
+	}
 }
 
 func (m createModel) loadBranches(remote bool) tea.Cmd {
@@ -397,26 +453,52 @@ func (m createModel) View() string {
 		}
 
 	case stepConfirm:
-		b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
-		b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
-		if m.branchMode == branchNew {
-			var baseStr string
-			if m.baseLoading {
-				baseStr = dimStyle.Render("(detecting…)")
-			} else if m.baseBranch != "" {
-				baseStr = accentStyle.Render(m.baseBranch)
+		if m.basePickerOpen {
+			b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
+			b.WriteString(dimStyle.Render("Select base branch") + "\n\n")
+			b.WriteString(m.searchInput.View())
+			b.WriteString("\n\n")
+			if len(m.filtered) == 0 {
+				b.WriteString(dimStyle.Render("No branches found"))
 			} else {
-				baseStr = dimStyle.Render("(current HEAD)")
+				limit := 10
+				if len(m.filtered) < limit {
+					limit = len(m.filtered)
+				}
+				for i := 0; i < limit; i++ {
+					if i == m.branchCursor {
+						b.WriteString(selectedStyle.Render(" ▸ " + m.filtered[i]))
+					} else {
+						b.WriteString(dimStyle.Render("   " + m.filtered[i]))
+					}
+					b.WriteString("\n")
+				}
+				if len(m.filtered) > limit {
+					b.WriteString(dimStyle.Render(fmt.Sprintf("   … and %d more", len(m.filtered)-limit)))
+				}
 			}
-			b.WriteString(dimStyle.Render("Base") + "       " + baseStr + "\n")
+		} else {
+			b.WriteString(dimStyle.Render("Worktree") + "   " + accentStyle.Render(m.worktreeName) + "\n")
+			b.WriteString(dimStyle.Render("Branch") + "     " + accentStyle.Render(m.branchName) + "\n")
+			if m.branchMode == branchNew {
+				var baseStr string
+				if m.baseLoading {
+					baseStr = dimStyle.Render("(detecting…)")
+				} else if m.baseBranch != "" {
+					baseStr = accentStyle.Render(m.baseBranch)
+				} else {
+					baseStr = dimStyle.Render("(current HEAD)")
+				}
+				b.WriteString(dimStyle.Render("Base") + "       " + baseStr + "\n")
+			}
+			modeStr := "new"
+			if m.branchMode == branchLocal {
+				modeStr = "local"
+			} else if m.branchMode == branchRemote {
+				modeStr = "remote"
+			}
+			b.WriteString(dimStyle.Render("Mode") + "       " + dimStyle.Render(modeStr))
 		}
-		modeStr := "new"
-		if m.branchMode == branchLocal {
-			modeStr = "local"
-		} else if m.branchMode == branchRemote {
-			modeStr = "remote"
-		}
-		b.WriteString(dimStyle.Render("Mode") + "       " + dimStyle.Render(modeStr))
 
 	case stepCreating:
 		b.WriteString(dimStyle.Render("Creating worktree…"))
@@ -440,6 +522,12 @@ func (m createModel) FooterHints() []footerKey {
 	case stepBranchSelect:
 		return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "back"}}
 	case stepConfirm:
+		if m.basePickerOpen {
+			return []footerKey{{"ctrl+j/k", "navigate"}, {"enter", "select"}, {"esc", "close"}}
+		}
+		if m.branchMode == branchNew {
+			return []footerKey{{"enter", "confirm"}, {"b", "change base"}, {"esc", "back"}}
+		}
 		return []footerKey{{"enter", "confirm"}, {"esc", "back"}}
 	default:
 		return nil
