@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.0
+
+- Default new branches to the repo's main branch with an override option (#5)
+- Auto-fetch remote branches before showing the branch selector (#6)
+- Validate branch names and auto-replace spaces on input (#3)
+- Clear stale error messages when starting a new flow (#4)
+- Run build, vet, and tests on pull requests via CI (#7)
+
 ## v0.2.2
 
 - Fix worktree creation path when running from inside a worktree — new worktrees are now always placed as siblings of the main repo, not the current worktree (#2)
