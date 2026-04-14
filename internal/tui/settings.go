@@ -234,5 +234,9 @@ func (m settingsModel) FooterHints() []footerKey {
 	if m.editing {
 		return []footerKey{{"enter", "save"}, {"esc", "cancel"}}
 	}
-	return []footerKey{{"enter", "edit"}, {"w", "save"}, {"esc", "back"}}
+	enterLabel := "edit"
+	if m.cursor < len(m.fields) && m.fields[m.cursor].kind == fieldBool {
+		enterLabel = "toggle"
+	}
+	return []footerKey{{"enter", enterLabel}, {"w", "save"}, {"esc", "back"}}
 }

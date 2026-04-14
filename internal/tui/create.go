@@ -153,6 +153,9 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			return m, nil
 		}
 		m.fetchErr = nil
+		// Bump gen so a late-arriving initial branchesLoadedMsg (same pre-fetch
+		// gen) can't overwrite the post-fetch reload we're about to dispatch.
+		m.branchesGen++
 		return m, m.loadBranches(true)
 
 	case spinner.TickMsg:
@@ -175,15 +178,20 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 				return m, func() tea.Msg { return createDoneMsg{} }
 			}
 			m.err = nil
+			// Invalidate any in-flight branch-list or fetch work unconditionally:
+			// the post-decrement cleanup below only fires when landing on
+			// stepBranchMode, but the user can escape directly from
+			// stepBranchSelect (which jumped past stepBranchName) and would
+			// otherwise leave a pending fetch to clobber state on arrival.
+			m.branchesGen++
+			m.fetchInFlight = false
+			m.fetchErr = nil
 			m.step--
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()
 				m.searchInput.Blur()
 				m.baseLoading = false
 				m.baseBranchExplicit = false
-				m.fetchInFlight = false
-				m.fetchErr = nil
-				m.branchesGen++
 			}
 			if m.step == stepName {
 				m.nameInput.Focus()

@@ -4,13 +4,12 @@
 
 ### Spinners
 
-Always construct TUI spinners the same way, so async states look consistent across the app:
+All TUI spinners share one style so async states look consistent across the app.
+Construct them via the `newDefaultSpinner()` helper in `internal/tui/helpers.go`:
 
 ```go
-spinner.New(
-    spinner.WithSpinner(spinner.Dot),
-    spinner.WithStyle(selectedStyle),
-)
+m.spinner = newDefaultSpinner()
 ```
 
-Use this for every spinner in `internal/tui/`. See `internal/tui/delete.go` for the canonical example.
+Do not call `spinner.New(...)` directly in new TUI code — extend the helper instead
+if a new style is ever needed.
