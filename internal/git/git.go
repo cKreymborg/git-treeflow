@@ -119,6 +119,13 @@ func ListLocalBranches(dir string) ([]string, error) {
 	return strings.Split(out, "\n"), nil
 }
 
+// FetchAllPrune runs `git fetch --all --prune` in dir, refreshing every
+// remote and removing remote-tracking branches whose upstream has been deleted.
+func FetchAllPrune(dir string) error {
+	_, err := runGit(dir, "fetch", "--all", "--prune")
+	return err
+}
+
 func ListRemoteBranches(dir string) ([]string, error) {
 	out, err := runGit(dir, "for-each-ref", "--format=%(refname:short)", "refs/remotes/")
 	if err != nil {

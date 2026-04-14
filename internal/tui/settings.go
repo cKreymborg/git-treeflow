@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type settingsModel struct {
@@ -22,19 +23,28 @@ type settingsModel struct {
 	saved    bool
 }
 
+type settingsFieldKind int
+
+const (
+	fieldText settingsFieldKind = iota
+	fieldBool
+)
+
 type settingsField struct {
 	label string
 	key   string
 	value string
+	kind  settingsFieldKind
 }
 
 func newSettingsModel(cfg config.Config, repoRoot string) settingsModel {
 	ti := textinput.New()
 
 	fields := []settingsField{
-		{label: "Worktree Path", key: "worktree_path", value: cfg.WorktreePath},
-		{label: "Copy Files", key: "copy_files", value: strings.Join(cfg.CopyFiles, ", ")},
-		{label: "Post-Create Hooks", key: "post_create_hooks", value: strings.Join(cfg.PostCreateHooks, ", ")},
+		{label: "Worktree Path", key: "worktree_path", value: cfg.WorktreePath, kind: fieldText},
+		{label: "Copy Files", key: "copy_files", value: strings.Join(cfg.CopyFiles, ", "), kind: fieldText},
+		{label: "Post-Create Hooks", key: "post_create_hooks", value: strings.Join(cfg.PostCreateHooks, ", "), kind: fieldText},
+		{label: "Auto-fetch Remote Branches", key: config.KeyAutoFetchRemoteBranches, value: boolDisplay(cfg.AutoFetchRemoteBranches), kind: fieldBool},
 	}
 
 	return settingsModel{
@@ -43,6 +53,23 @@ func newSettingsModel(cfg config.Config, repoRoot string) settingsModel {
 		input:    ti,
 		fields:   fields,
 	}
+}
+
+func boolDisplay(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
+}
+
+func renderFieldValue(f settingsField, textStyle lipgloss.Style) string {
+	if f.kind == fieldBool {
+		if f.value == "on" {
+			return successStyle.Render("[on]")
+		}
+		return dimStyle.Render("[off]")
+	}
+	return textStyle.Render(f.value)
 }
 
 func (m settingsModel) Update(msg tea.Msg) (settingsModel, tea.Cmd) {
@@ -76,8 +103,15 @@ func (m settingsModel) handleNavigation(msg tea.KeyMsg) (settingsModel, tea.Cmd)
 			m.cursor--
 		}
 	case "enter":
+		f := m.fields[m.cursor]
+		if f.kind == fieldBool {
+			m.fields[m.cursor].value = boolDisplay(f.value != "on")
+			m.applyFields()
+			m.saved = false
+			return m, nil
+		}
 		m.editing = true
-		m.input.SetValue(m.fields[m.cursor].value)
+		m.input.SetValue(f.value)
 		m.input.Focus()
 		return m, textinput.Blink
 	case "w":
@@ -136,6 +170,8 @@ func (m *settingsModel) applyFields() {
 			m.cfg.CopyFiles = splitAndTrim(f.value)
 		case "post_create_hooks":
 			m.cfg.PostCreateHooks = splitAndTrim(f.value)
+		case config.KeyAutoFetchRemoteBranches:
+			m.cfg.AutoFetchRemoteBranches = f.value == "on"
 		}
 	}
 }
@@ -168,10 +204,10 @@ func (m settingsModel) View() string {
 			b.WriteString("  " + m.input.View())
 		} else if i == m.cursor {
 			b.WriteString(selectedStyle.Render("▸ " + f.label) + "\n")
-			b.WriteString("  " + normalStyle.Render(f.value))
+			b.WriteString("  " + renderFieldValue(f, normalStyle))
 		} else {
 			b.WriteString(dimStyle.Render("  " + f.label) + "\n")
-			b.WriteString("  " + dimStyle.Render(f.value))
+			b.WriteString("  " + renderFieldValue(f, dimStyle))
 		}
 		b.WriteString("\n")
 	}
@@ -198,5 +234,9 @@ func (m settingsModel) FooterHints() []footerKey {
 	if m.editing {
 		return []footerKey{{"enter", "save"}, {"esc", "cancel"}}
 	}
-	return []footerKey{{"enter", "edit"}, {"w", "save"}, {"esc", "back"}}
+	enterLabel := "edit"
+	if m.cursor < len(m.fields) && m.fields[m.cursor].kind == fieldBool {
+		enterLabel = "toggle"
+	}
+	return []footerKey{{"enter", enterLabel}, {"w", "save"}, {"esc", "back"}}
 }

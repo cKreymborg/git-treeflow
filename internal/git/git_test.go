@@ -564,6 +564,137 @@ func TestDefaultBranch_OriginHeadWithoutLocal(t *testing.T) {
 	}
 }
 
+func TestFetchAllPrune_Success(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	pusher := t.TempDir()
+	pushCmds := [][]string{
+		{"git", "clone", remote, "."},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "checkout", "-b", "feature-x"},
+		{"git", "commit", "--allow-empty", "-m", "feature commit"},
+		{"git", "push", "origin", "feature-x"},
+	}
+	for _, args := range pushCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = pusher
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	before, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches before: %v", err)
+	}
+	for _, b := range before {
+		if b == "origin/feature-x" {
+			t.Fatalf("expected origin/feature-x to be absent before fetch, got %v", before)
+		}
+	}
+
+	if err := FetchAllPrune(dir); err != nil {
+		t.Fatalf("FetchAllPrune: %v", err)
+	}
+
+	after, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches after: %v", err)
+	}
+	found := false
+	for _, b := range after {
+		if b == "origin/feature-x" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected origin/feature-x in remote branches after fetch, got %v", after)
+	}
+}
+
+func TestFetchAllPrune_Prunes(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupBareRemote(t, "main")
+
+	pusher := t.TempDir()
+	pushCmds := [][]string{
+		{"git", "clone", remote, "."},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "checkout", "-b", "to-be-deleted"},
+		{"git", "commit", "--allow-empty", "-m", "doomed"},
+		{"git", "push", "origin", "to-be-deleted"},
+	}
+	for _, args := range pushCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = pusher
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	before, _ := ListRemoteBranches(dir)
+	foundBefore := false
+	for _, b := range before {
+		if b == "origin/to-be-deleted" {
+			foundBefore = true
+		}
+	}
+	if !foundBefore {
+		t.Fatalf("expected origin/to-be-deleted before deletion, got %v", before)
+	}
+
+	delCmd := exec.Command("git", "push", "origin", "--delete", "to-be-deleted")
+	delCmd.Dir = pusher
+	if out, err := delCmd.CombinedOutput(); err != nil {
+		t.Fatalf("delete branch on remote failed: %v\n%s", err, out)
+	}
+
+	if err := FetchAllPrune(dir); err != nil {
+		t.Fatalf("FetchAllPrune: %v", err)
+	}
+
+	after, _ := ListRemoteBranches(dir)
+	for _, b := range after {
+		if b == "origin/to-be-deleted" {
+			t.Errorf("expected origin/to-be-deleted to be pruned, got %v", after)
+		}
+	}
+}
+
+func TestFetchAllPrune_NoRemote(t *testing.T) {
+	dir := setupTestRepo(t)
+	if err := FetchAllPrune(dir); err != nil {
+		t.Errorf("FetchAllPrune in repo with no remotes: %v", err)
+	}
+}
+
 func TestValidateBranchName(t *testing.T) {
 	valid := []string{
 		"feature",

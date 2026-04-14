@@ -3,12 +3,14 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/cKreymborg/git-treeflow/internal/config"
 	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sahilm/fuzzy"
@@ -49,10 +51,13 @@ type createModel struct {
 	worktreeName       string
 	branchName         string
 	baseBranch         string // resolved default branch, or "" if detection failed/not applicable
-	baseLoading        bool   // true while DefaultBranch is being resolved
-	basePickerOpen     bool   // true while the base-branch picker overlay is shown on stepConfirm
-	baseBranchExplicit bool   // true once the user picks a base via the 'b' picker
-	branchesGen        int    // increments on each loadBranches dispatch so stale results can be ignored
+	baseLoading        bool
+	basePickerOpen     bool
+	baseBranchExplicit bool
+	branchesGen        int // bumped on each branch-list dispatch so stale results can be ignored
+	fetchInFlight      bool
+	fetchErr           error
+	spinner            spinner.Model
 }
 
 type createDoneMsg struct {
@@ -69,6 +74,11 @@ type branchesLoadedMsg struct {
 type defaultBranchLoadedMsg struct {
 	branch string
 	err    error
+}
+
+type remoteFetchDoneMsg struct {
+	err error
+	gen int
 }
 
 func newCreateModel(repoRoot string, cfg config.Config) createModel {
@@ -89,6 +99,7 @@ func newCreateModel(repoRoot string, cfg config.Config) createModel {
 		searchInput: si,
 		repoRoot:    repoRoot,
 		cfg:         cfg,
+		spinner:     newDefaultSpinner(),
 	}
 }
 
@@ -102,6 +113,10 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 		if msg.gen != m.branchesGen {
 			return m, nil
 		}
+		prevSelected := ""
+		if m.branchCursor < len(m.filtered) {
+			prevSelected = m.filtered[m.branchCursor]
+		}
 		m.branches = msg.branches
 		query := m.searchInput.Value()
 		if query == "" {
@@ -113,7 +128,11 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 				m.filtered[i] = match.Str
 			}
 		}
-		m.branchCursor = 0
+		idx := slices.Index(m.filtered, prevSelected)
+		if idx < 0 {
+			idx = 0
+		}
+		m.branchCursor = idx
 		m.err = msg.err
 		return m, nil
 
@@ -123,6 +142,29 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 			m.baseBranch = msg.branch // "" if err != nil
 		}
 		return m, nil
+
+	case remoteFetchDoneMsg:
+		if msg.gen != m.branchesGen {
+			return m, nil
+		}
+		m.fetchInFlight = false
+		if msg.err != nil {
+			m.fetchErr = msg.err
+			return m, nil
+		}
+		m.fetchErr = nil
+		// Bump gen so a late-arriving initial branchesLoadedMsg (same pre-fetch
+		// gen) can't overwrite the post-fetch reload we're about to dispatch.
+		m.branchesGen++
+		return m, m.loadBranches(true)
+
+	case spinner.TickMsg:
+		if !m.fetchInFlight {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case createDoneMsg:
 		return m, func() tea.Msg { return msg }
@@ -136,6 +178,14 @@ func (m createModel) Update(msg tea.Msg) (createModel, tea.Cmd) {
 				return m, func() tea.Msg { return createDoneMsg{} }
 			}
 			m.err = nil
+			// Invalidate any in-flight branch-list or fetch work unconditionally:
+			// the post-decrement cleanup below only fires when landing on
+			// stepBranchMode, but the user can escape directly from
+			// stepBranchSelect (which jumped past stepBranchName) and would
+			// otherwise leave a pending fetch to clobber state on arrival.
+			m.branchesGen++
+			m.fetchInFlight = false
+			m.fetchErr = nil
 			m.step--
 			if m.step == stepBranchMode {
 				m.branchInput.Blur()
@@ -214,7 +264,13 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 				m.step = stepBranchSelect
 				m.searchInput.Focus()
 				m.branchesGen++
-				return m, tea.Batch(textinput.Blink, m.loadBranches(true))
+				m.fetchErr = nil
+				cmds := []tea.Cmd{textinput.Blink, m.loadBranches(true)}
+				if m.cfg.AutoFetchRemoteBranches {
+					m.fetchInFlight = true
+					cmds = append(cmds, m.fetchRemotes(), m.spinner.Tick)
+				}
+				return m, tea.Batch(cmds...)
 			}
 		}
 		return m, nil
@@ -368,6 +424,15 @@ func (m createModel) loadBranches(remote bool) tea.Cmd {
 	}
 }
 
+func (m createModel) fetchRemotes() tea.Cmd {
+	gen := m.branchesGen
+	repoRoot := m.repoRoot
+	return func() tea.Msg {
+		err := gitpkg.FetchAllPrune(repoRoot)
+		return remoteFetchDoneMsg{err: err, gen: gen}
+	}
+}
+
 func (m createModel) loadDefaultBranch() tea.Cmd {
 	return func() tea.Msg {
 		branch, err := gitpkg.DefaultBranch(m.repoRoot)
@@ -453,7 +518,15 @@ func (m createModel) View() string {
 
 	case stepBranchSelect:
 		b.WriteString(dimStyle.Render("Worktree") + "  " + accentStyle.Render(m.worktreeName) + "\n\n")
-		b.WriteString(dimStyle.Render("Select branch") + "\n\n")
+		header := dimStyle.Render("Select branch")
+		if m.branchMode == branchRemote {
+			if m.fetchInFlight {
+				header += "  " + m.spinner.View()
+			} else if m.fetchErr != nil {
+				header += "  " + dimStyle.Render("⚠ couldn't refresh")
+			}
+		}
+		b.WriteString(header + "\n\n")
 		b.WriteString(m.searchInput.View())
 		b.WriteString("\n\n")
 		if len(m.filtered) == 0 {
