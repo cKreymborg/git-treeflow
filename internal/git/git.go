@@ -126,8 +126,18 @@ func FetchAllPrune(dir string) error {
 	return err
 }
 
+// ListRemoteBranches returns remote-tracking branches sorted by committer
+// date of the tip commit (most recent first), with the repository's default
+// branch (e.g. origin/main) pinned to index 0 when detectable.
+//
+// We use the full %(refname) format because %(refname:short) collapses
+// symbolic refs like refs/remotes/origin/HEAD to the bare remote name
+// (e.g. "origin"), which would leak into the result.
 func ListRemoteBranches(dir string) ([]string, error) {
-	out, err := runGit(dir, "for-each-ref", "--format=%(refname:short)", "refs/remotes/")
+	out, err := runGit(dir, "for-each-ref",
+		"--format=%(refname)",
+		"--sort=-committerdate",
+		"refs/remotes/")
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +145,36 @@ func ListRemoteBranches(dir string) ([]string, error) {
 		return nil, nil
 	}
 	var branches []string
-	for _, b := range strings.Split(out, "\n") {
-		if strings.HasSuffix(b, "/HEAD") {
+	for _, ref := range strings.Split(out, "\n") {
+		short, ok := strings.CutPrefix(ref, "refs/remotes/")
+		if !ok {
 			continue
 		}
-		branches = append(branches, b)
+		if strings.HasSuffix(short, "/HEAD") {
+			continue
+		}
+		branches = append(branches, short)
+	}
+	if len(branches) == 0 {
+		return nil, nil
+	}
+	defaultBranch, err := DefaultBranch(dir)
+	if err != nil || defaultBranch == "" {
+		return branches, nil
+	}
+	for i, b := range branches {
+		// Split only on the first slash so branch names containing
+		// slashes (e.g. "feature/foo") still compare as a whole.
+		remote, name, ok := strings.Cut(b, "/")
+		if !ok || remote == "" || name != defaultBranch {
+			continue
+		}
+		if i != 0 {
+			pinned := branches[i]
+			branches = append(branches[:i], branches[i+1:]...)
+			branches = append([]string{pinned}, branches...)
+		}
+		break
 	}
 	return branches, nil
 }
