@@ -739,3 +739,221 @@ func TestValidateBranchName(t *testing.T) {
 		}
 	}
 }
+
+type remoteBranch struct {
+	name string
+	date string // ISO 8601 e.g. "2099-01-01T00:00:00Z"
+}
+
+// setupRemoteWithBranches creates a bare remote with default branch "main",
+// then pushes each given branch with its committer/author date controlled.
+// Returns the bare remote path. The seed "main" branch's commit date is
+// approximately "now" (whenever the test runs); use future dates in
+// pushes if you want them sorted ahead of main.
+func setupRemoteWithBranches(t *testing.T, branches []remoteBranch) string {
+	t.Helper()
+	remote := setupBareRemote(t, "main")
+
+	pusher := t.TempDir()
+	initCmds := [][]string{
+		{"git", "clone", remote, "."},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		// Bare remote's HEAD may not resolve to a real branch after our
+		// push-only seed, leaving the clone with no local "main". Force-
+		// create it from origin/main so subsequent checkouts can branch
+		// from it.
+		{"git", "checkout", "-B", "main", "origin/main"},
+	}
+	for _, args := range initCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = pusher
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher init %v failed: %v\n%s", args, err, out)
+		}
+	}
+	for _, b := range branches {
+		coCmd := exec.Command("git", "checkout", "-b", b.name, "main")
+		coCmd.Dir = pusher
+		if out, err := coCmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher checkout %s failed: %v\n%s", b.name, err, out)
+		}
+		commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", "commit on "+b.name)
+		commitCmd.Dir = pusher
+		commitCmd.Env = append(os.Environ(),
+			"GIT_COMMITTER_DATE="+b.date,
+			"GIT_AUTHOR_DATE="+b.date,
+		)
+		if out, err := commitCmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher commit %s failed: %v\n%s", b.name, err, out)
+		}
+		pushCmd := exec.Command("git", "push", "origin", b.name)
+		pushCmd.Dir = pusher
+		if out, err := pushCmd.CombinedOutput(); err != nil {
+			t.Fatalf("pusher push %s failed: %v\n%s", b.name, err, out)
+		}
+	}
+	return remote
+}
+
+func addOriginAndFetch(t *testing.T, dir, remote string) {
+	t.Helper()
+	cmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+}
+
+func TestListRemoteBranches_SortedByCommitterDate(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupRemoteWithBranches(t, []remoteBranch{
+		{name: "branch-old", date: "2099-01-01T00:00:00Z"},
+		{name: "branch-mid", date: "2099-02-01T00:00:00Z"},
+		{name: "branch-new", date: "2099-04-01T00:00:00Z"},
+	})
+	addOriginAndFetch(t, dir, remote)
+
+	branches, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches: %v", err)
+	}
+
+	// Local has only master and remote has main, so DefaultBranch returns
+	// "master" (local fallback) and the pin step finds no */master ref —
+	// the result is pure date-sorted, no pinning interference.
+	indexOf := func(name string) int {
+		for i, b := range branches {
+			if b == name {
+				return i
+			}
+		}
+		return -1
+	}
+	iNew := indexOf("origin/branch-new")
+	iMid := indexOf("origin/branch-mid")
+	iOld := indexOf("origin/branch-old")
+	if iNew < 0 || iMid < 0 || iOld < 0 {
+		t.Fatalf("expected all 3 test branches in result, got %v", branches)
+	}
+	if !(iNew < iMid && iMid < iOld) {
+		t.Errorf("expected order branch-new < branch-mid < branch-old by index, got new=%d mid=%d old=%d in %v",
+			iNew, iMid, iOld, branches)
+	}
+}
+
+func TestListRemoteBranches_PinsDefaultBranch(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupRemoteWithBranches(t, []remoteBranch{
+		{name: "feature-recent", date: "2099-04-01T00:00:00Z"},
+	})
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+		{"git", "branch", "main", "origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	branches, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches: %v", err)
+	}
+
+	if len(branches) < 2 {
+		t.Fatalf("expected at least 2 branches, got %v", branches)
+	}
+	// Without pinning, origin/feature-recent (2099-04) would be index 0
+	// since it is newer than origin/main (committed at "now"). The pin
+	// must override the date order.
+	if branches[0] != "origin/main" {
+		t.Errorf("expected origin/main pinned at index 0, got %q (full list %v)",
+			branches[0], branches)
+	}
+}
+
+func TestListRemoteBranches_FiltersHEAD(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupRemoteWithBranches(t, []remoteBranch{
+		{name: "feature", date: "2099-04-01T00:00:00Z"},
+	})
+
+	setupCmds := [][]string{
+		{"git", "remote", "add", "origin", remote},
+		{"git", "fetch", "origin"},
+		{"git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"},
+	}
+	for _, args := range setupCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("setup cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	branches, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches: %v", err)
+	}
+	for _, b := range branches {
+		if b == "origin/HEAD" || b == "origin" {
+			t.Errorf("expected origin/HEAD symbolic ref to be filtered out, got %q in %v", b, branches)
+		}
+	}
+}
+
+func TestListRemoteBranches_NoDefaultBranchSkipsPin(t *testing.T) {
+	dir := setupTestRepo(t)
+	remote := setupRemoteWithBranches(t, []remoteBranch{
+		{name: "branch-old", date: "2099-01-01T00:00:00Z"},
+		{name: "branch-new", date: "2099-04-01T00:00:00Z"},
+	})
+	addOriginAndFetch(t, dir, remote)
+
+	// Make DefaultBranch fail: switch to a non-main/master branch and
+	// delete master. No origin/HEAD was set above, so DefaultBranch has
+	// nothing to fall back on.
+	teardownCmds := [][]string{
+		{"git", "checkout", "-b", "foo"},
+		{"git", "branch", "-D", "master"},
+	}
+	for _, args := range teardownCmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("teardown cmd %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	if _, err := DefaultBranch(dir); err == nil {
+		t.Fatalf("DefaultBranch unexpectedly succeeded; test setup is wrong")
+	}
+
+	branches, err := ListRemoteBranches(dir)
+	if err != nil {
+		t.Fatalf("ListRemoteBranches: %v", err)
+	}
+	if len(branches) == 0 {
+		t.Fatalf("expected branches, got empty")
+	}
+
+	// origin/main was committed at "now" — older than the 2099-dated
+	// test branches. Without pinning, origin/branch-new must be first.
+	if branches[0] != "origin/branch-new" {
+		t.Errorf("expected origin/branch-new at index 0 (most recent, no pin), got %q (full list %v)",
+			branches[0], branches)
+	}
+}
