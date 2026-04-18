@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Show repo name (org/repo, with basename fallback) on the home screen
+
 ## v0.3.0
 
 - Default new branches to the repo's main branch with an override option (#5)

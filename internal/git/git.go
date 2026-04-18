@@ -71,6 +71,85 @@ func RepoName(dir string) (string, error) {
 	return filepath.Base(root), nil
 }
 
+// RemoteOriginURL returns the configured URL of the "origin" remote.
+// Returns an empty string (no error) when no origin is configured.
+func RemoteOriginURL(dir string) (string, error) {
+	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ParseRepoSlug extracts an "org/repo" slug from a git remote URL.
+// Supports SSH (git@host:org/repo.git), SSH with ssh:// scheme
+// (ssh://git@host/org/repo.git), and HTTPS (https://host/org/repo.git).
+// The trailing ".git" is stripped. Returns "" for unparseable URLs.
+func ParseRepoSlug(url string) string {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return ""
+	}
+
+	var path string
+	switch {
+	case strings.HasPrefix(url, "git@"):
+		_, rest, ok := strings.Cut(url, ":")
+		if !ok {
+			return ""
+		}
+		path = rest
+	case strings.Contains(url, "://"):
+		_, rest, ok := strings.Cut(url, "://")
+		if !ok {
+			return ""
+		}
+		_, after, ok := strings.Cut(rest, "/")
+		if !ok {
+			return ""
+		}
+		path = after
+	default:
+		return ""
+	}
+
+	path = strings.TrimSuffix(path, ".git")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return ""
+	}
+
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	org := parts[len(parts)-2]
+	repo := parts[len(parts)-1]
+	if org == "" || repo == "" {
+		return ""
+	}
+	return org + "/" + repo
+}
+
+// RepoDisplayName returns an "org/repo" slug parsed from origin's URL,
+// falling back to the basename of the repo root when no remote is
+// configured or the URL can't be parsed.
+func RepoDisplayName(dir string) (string, error) {
+	url, err := RemoteOriginURL(dir)
+	if err != nil {
+		return "", err
+	}
+	if slug := ParseRepoSlug(url); slug != "" {
+		return slug, nil
+	}
+	return RepoName(dir)
+}
+
 func ListWorktrees(dir string) ([]Worktree, error) {
 	out, err := runGit(dir, "worktree", "list", "--porcelain")
 	if err != nil {

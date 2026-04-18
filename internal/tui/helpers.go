@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func newDefaultSpinner() spinner.Model {
@@ -38,6 +39,28 @@ func copyFiles(srcDir, dstDir string, patterns []string) []string {
 		}
 	}
 	return errs
+}
+
+// truncateTail shortens s to fit within maxWidth visual columns, appending
+// a "…" when truncation occurs. Returns s unchanged if it already fits.
+func truncateTail(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	if maxWidth == 1 {
+		return "…"
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
 }
 
 func runHooks(dir string, hooks []string) []string {
