@@ -3,18 +3,19 @@ package tui
 import "github.com/charmbracelet/bubbles/key"
 
 type listKeyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Top         key.Binding
-	Bottom      key.Binding
-	Select      key.Binding
-	Create      key.Binding
-	Delete      key.Binding
-	Prune       key.Binding
-	Settings    key.Binding
-	ToggleView  key.Binding
-	Help        key.Binding
-	Quit        key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	Top        key.Binding
+	Bottom     key.Binding
+	Select     key.Binding
+	Create     key.Binding
+	FastCreate key.Binding
+	Delete     key.Binding
+	Prune      key.Binding
+	Settings   key.Binding
+	ToggleView key.Binding
+	Help       key.Binding
+	Quit       key.Binding
 }
 
 var listKeys = listKeyMap{
@@ -24,6 +25,7 @@ var listKeys = listKeyMap{
 	Bottom:     key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
 	Select:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "switch to worktree")),
 	Create:     key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "create worktree")),
+	FastCreate: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "quick create")),
 	Delete:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete worktree")),
 	Prune:      key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prune stale")),
 	Settings:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
