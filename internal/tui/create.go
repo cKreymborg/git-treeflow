@@ -2,10 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/cKreymborg/git-treeflow/internal/config"
 	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
@@ -229,11 +227,7 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.nameInput, cmd = m.nameInput.Update(msg)
-			if val := m.nameInput.Value(); strings.Contains(val, " ") {
-				pos := m.nameInput.Position()
-				m.nameInput.SetValue(strings.ReplaceAll(val, " ", "-"))
-				m.nameInput.SetCursor(pos)
-			}
+			normalizeInputSpaces(&m.nameInput)
 			return m, cmd
 		}
 
@@ -295,11 +289,7 @@ func (m createModel) handleKey(msg tea.KeyMsg) (createModel, tea.Cmd) {
 			m.err = nil
 			var cmd tea.Cmd
 			m.branchInput, cmd = m.branchInput.Update(msg)
-			if val := m.branchInput.Value(); strings.Contains(val, " ") {
-				pos := m.branchInput.Position()
-				m.branchInput.SetValue(strings.ReplaceAll(val, " ", "-"))
-				m.branchInput.SetCursor(pos)
-			}
+			normalizeInputSpaces(&m.branchInput)
 			return m, cmd
 		}
 
@@ -441,52 +431,23 @@ func (m createModel) loadDefaultBranch() tea.Cmd {
 }
 
 func (m createModel) doCreate() tea.Cmd {
+	repoRoot := m.repoRoot
+	cfg := m.cfg
+	worktreeName := m.worktreeName
+	branchLabel := m.branchName
+	checkout := m.branchName
+	if m.branchMode == branchRemote {
+		if parts := strings.SplitN(checkout, "/", 2); len(parts) == 2 {
+			checkout = parts[1]
+		}
+	}
+	isNew := m.branchMode == branchNew
+	base := ""
+	if isNew {
+		base = m.baseBranch
+	}
 	return func() tea.Msg {
-		mainRoot, err := gitpkg.MainWorktreeRoot(m.repoRoot)
-		if err != nil {
-			return createDoneMsg{err: err}
-		}
-
-		repoName := filepath.Base(mainRoot)
-
-		vars := map[string]string{
-			"repoName":     repoName,
-			"worktreeName": m.worktreeName,
-			"branchName":   m.branchName,
-			"date":         time.Now().Format("2006-01-02"),
-		}
-
-		relPath := config.ExpandPath(m.cfg.WorktreePath, vars)
-		wtPath := filepath.Join(mainRoot, relPath)
-		wtPath, _ = filepath.Abs(wtPath)
-
-		isNew := m.branchMode == branchNew
-		branch := m.branchName
-		if m.branchMode == branchRemote {
-			parts := strings.SplitN(branch, "/", 2)
-			if len(parts) == 2 {
-				branch = parts[1]
-			}
-		}
-
-		base := ""
-		if isNew {
-			base = m.baseBranch
-		}
-		err = gitpkg.CreateWorktree(m.repoRoot, wtPath, branch, base, isNew)
-		if err != nil {
-			return createDoneMsg{err: err}
-		}
-
-		var warnings []string
-		warnings = append(warnings, copyFiles(m.repoRoot, wtPath, m.cfg.CopyFiles)...)
-		warnings = append(warnings, runHooks(wtPath, m.cfg.PostCreateHooks)...)
-
-		var warnErr error
-		if len(warnings) > 0 {
-			warnErr = fmt.Errorf("warnings: %s", strings.Join(warnings, "; "))
-		}
-		return createDoneMsg{wtPath: wtPath, err: warnErr}
+		return createAndFinalizeWorktree(repoRoot, cfg, worktreeName, branchLabel, checkout, base, isNew)
 	}
 }
 

@@ -320,7 +320,7 @@ func (m AppModel) helpContent() string {
 		{"G", "Jump to bottom"},
 		{"enter", "Switch to worktree"},
 		{"c", "Create worktree"},
-		{"f", "Quick create (off main)"},
+		{"f", "Quick create (off default branch)"},
 		{"d", "Delete worktree"},
 		{"p", "Prune stale worktrees"},
 		{"s", "Settings"},

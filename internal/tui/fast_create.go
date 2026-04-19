@@ -2,9 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cKreymborg/git-treeflow/internal/config"
 	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
@@ -59,10 +57,15 @@ func (m fastCreateModel) Update(msg tea.Msg) (fastCreateModel, tea.Cmd) {
 		return m, func() tea.Msg { return msg }
 
 	case tea.KeyMsg:
-		if msg.String() == "esc" {
-			return m, func() tea.Msg { return createDoneMsg{} }
+		if m.step != fastStepName {
+			// Ignore input while the creation goroutine is in flight; its
+			// own createDoneMsg will navigate back to the list.
+			return m, nil
 		}
-		if m.step == fastStepName && msg.String() == "enter" {
+		switch msg.String() {
+		case "esc":
+			return m, func() tea.Msg { return createDoneMsg{} }
+		case "enter":
 			val := strings.TrimSpace(m.nameInput.Value())
 			if val == "" {
 				return m, nil
@@ -83,11 +86,7 @@ func (m fastCreateModel) Update(msg tea.Msg) (fastCreateModel, tea.Cmd) {
 	if m.step == fastStepName {
 		var cmd tea.Cmd
 		m.nameInput, cmd = m.nameInput.Update(msg)
-		if val := m.nameInput.Value(); strings.Contains(val, " ") {
-			pos := m.nameInput.Position()
-			m.nameInput.SetValue(strings.ReplaceAll(val, " ", "-"))
-			m.nameInput.SetCursor(pos)
-		}
+		normalizeInputSpaces(&m.nameInput)
 		m.err = nil
 		return m, cmd
 	}
@@ -106,33 +105,7 @@ func (m fastCreateModel) doCreate(name string) tea.Cmd {
 	cfg := m.cfg
 	base := m.baseBranch
 	return func() tea.Msg {
-		mainRoot, err := gitpkg.MainWorktreeRoot(repoRoot)
-		if err != nil {
-			return createDoneMsg{err: err}
-		}
-		vars := map[string]string{
-			"repoName":     filepath.Base(mainRoot),
-			"worktreeName": name,
-			"branchName":   name,
-			"date":         time.Now().Format("2006-01-02"),
-		}
-		relPath := config.ExpandPath(cfg.WorktreePath, vars)
-		wtPath := filepath.Join(mainRoot, relPath)
-		wtPath, _ = filepath.Abs(wtPath)
-
-		if err := gitpkg.CreateWorktree(repoRoot, wtPath, name, base, true); err != nil {
-			return createDoneMsg{err: err}
-		}
-
-		var warnings []string
-		warnings = append(warnings, copyFiles(repoRoot, wtPath, cfg.CopyFiles)...)
-		warnings = append(warnings, runHooks(wtPath, cfg.PostCreateHooks)...)
-
-		var warnErr error
-		if len(warnings) > 0 {
-			warnErr = fmt.Errorf("warnings: %s", strings.Join(warnings, "; "))
-		}
-		return createDoneMsg{wtPath: wtPath, err: warnErr}
+		return createAndFinalizeWorktree(repoRoot, cfg, name, name, name, base, true)
 	}
 }
 
