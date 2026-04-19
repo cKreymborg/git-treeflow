@@ -6,8 +6,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/cKreymborg/git-treeflow/internal/config"
+	gitpkg "github.com/cKreymborg/git-treeflow/internal/git"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -61,6 +66,55 @@ func truncateTail(s string, maxWidth int) string {
 		}
 	}
 	return "…"
+}
+
+// normalizeInputSpaces rewrites any spaces in ti's value to hyphens in place,
+// preserving the cursor column. Both the Create and Quick Create flows use
+// this to keep worktree/branch names shell-friendly while the user types.
+func normalizeInputSpaces(ti *textinput.Model) {
+	val := ti.Value()
+	if !strings.Contains(val, " ") {
+		return
+	}
+	pos := ti.Position()
+	ti.SetValue(strings.ReplaceAll(val, " ", "-"))
+	ti.SetCursor(pos)
+}
+
+// createAndFinalizeWorktree resolves the target path from cfg.WorktreePath,
+// creates the worktree on the given base, and runs the configured copy/hook
+// post-steps. branchLabel is exposed to path templates; branchCheckout is the
+// ref actually passed to git (they differ for remote refs where the caller
+// strips the "origin/" prefix before checkout).
+func createAndFinalizeWorktree(repoRoot string, cfg config.Config, worktreeName, branchLabel, branchCheckout, base string, isNew bool) createDoneMsg {
+	mainRoot, err := gitpkg.MainWorktreeRoot(repoRoot)
+	if err != nil {
+		return createDoneMsg{err: err}
+	}
+
+	vars := map[string]string{
+		"repoName":     filepath.Base(mainRoot),
+		"worktreeName": worktreeName,
+		"branchName":   branchLabel,
+		"date":         time.Now().Format("2006-01-02"),
+	}
+	relPath := config.ExpandPath(cfg.WorktreePath, vars)
+	wtPath := filepath.Join(mainRoot, relPath)
+	wtPath, _ = filepath.Abs(wtPath)
+
+	if err := gitpkg.CreateWorktree(repoRoot, wtPath, branchCheckout, base, isNew); err != nil {
+		return createDoneMsg{err: err}
+	}
+
+	var warnings []string
+	warnings = append(warnings, copyFiles(repoRoot, wtPath, cfg.CopyFiles)...)
+	warnings = append(warnings, runHooks(wtPath, cfg.PostCreateHooks)...)
+
+	var warnErr error
+	if len(warnings) > 0 {
+		warnErr = fmt.Errorf("warnings: %s", strings.Join(warnings, "; "))
+	}
+	return createDoneMsg{wtPath: wtPath, err: warnErr}
 }
 
 func runHooks(dir string, hooks []string) []string {

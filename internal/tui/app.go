@@ -17,6 +17,7 @@ type viewState int
 const (
 	viewList viewState = iota
 	viewCreate
+	viewFastCreate
 	viewDelete
 	viewSettings
 	viewPrune
@@ -37,6 +38,7 @@ type AppModel struct {
 	view       viewState
 	list       listModel
 	create     createModel
+	fastCreate fastCreateModel
 	del        deleteModel
 	settings   settingsModel
 	prune      pruneModel
@@ -119,6 +121,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewCreate:
 		m.create, cmd = m.create.Update(msg)
+	case viewFastCreate:
+		m.fastCreate, cmd = m.fastCreate.Update(msg)
 	case viewDelete:
 		m.del, cmd = m.del.Update(msg)
 	case viewSettings:
@@ -147,6 +151,8 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.view {
 		case viewCreate:
 			m.create, cmd = m.create.Update(msg)
+		case viewFastCreate:
+			m.fastCreate, cmd = m.fastCreate.Update(msg)
 		case viewDelete:
 			m.del, cmd = m.del.Update(msg)
 		case viewSettings:
@@ -179,6 +185,11 @@ func (m AppModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewCreate
 		m.create = newCreateModel(m.repoRoot, m.cfg)
 		return m, m.create.Init()
+	case key.Matches(msg, listKeys.FastCreate):
+		m.err = nil
+		m.view = viewFastCreate
+		m.fastCreate = newFastCreateModel(m.repoRoot, m.cfg)
+		return m, m.fastCreate.Init()
 	case key.Matches(msg, listKeys.Delete):
 		m.err = nil
 		wt := m.list.selectedWorktree()
@@ -245,13 +256,17 @@ func (m AppModel) View() string {
 			content = m.list.View(m.panelInnerWidth())
 			title = m.listTitle()
 			footer = []footerKey{
-				{"enter", "switch"}, {"c", "create"}, {"d", "delete"},
-				{"?", "help"}, {"q", "quit"},
+				{"enter", "switch"}, {"c", "create"}, {"f", "quick create"},
+				{"d", "delete"}, {"?", "help"}, {"q", "quit"},
 			}
 		case viewCreate:
 			content = m.create.View()
 			title = "Create Worktree"
 			footer = m.create.FooterHints()
+		case viewFastCreate:
+			content = m.fastCreate.View()
+			title = "Quick Create"
+			footer = m.fastCreate.FooterHints()
 		case viewDelete:
 			content = m.del.View(m.panelInnerWidth())
 			title = "Delete Worktree"
@@ -305,6 +320,7 @@ func (m AppModel) helpContent() string {
 		{"G", "Jump to bottom"},
 		{"enter", "Switch to worktree"},
 		{"c", "Create worktree"},
+		{"f", "Quick create (off default branch)"},
 		{"d", "Delete worktree"},
 		{"p", "Prune stale worktrees"},
 		{"s", "Settings"},
