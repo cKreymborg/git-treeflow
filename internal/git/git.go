@@ -72,14 +72,18 @@ func RepoName(dir string) (string, error) {
 }
 
 // RemoteOriginURL returns the configured URL of the "origin" remote.
-// Returns an empty string (no error) when no origin is configured.
+// Returns an empty string (no error) when no origin is configured
+// (git config exits 1 when the key is missing).
 func RemoteOriginURL(dir string) (string, error) {
 	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return "", nil
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return "", nil
+			}
+			return "", fmt.Errorf("git config --get remote.origin.url: %s", string(exitErr.Stderr))
 		}
 		return "", err
 	}
@@ -118,8 +122,8 @@ func ParseRepoSlug(url string) string {
 		return ""
 	}
 
-	path = strings.TrimSuffix(path, ".git")
 	path = strings.Trim(path, "/")
+	path = strings.TrimSuffix(path, ".git")
 	if path == "" {
 		return ""
 	}

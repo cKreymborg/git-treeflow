@@ -819,6 +819,8 @@ func TestParseRepoSlug(t *testing.T) {
 		{"git@github.com:ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
 		{"git@github.com:ckreymborg/git-treeflow", "ckreymborg/git-treeflow"},
 		{"https://github.com/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow.git/", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow/", "ckreymborg/git-treeflow"},
 		{"https://github.com/ckreymborg/git-treeflow", "ckreymborg/git-treeflow"},
 		{"ssh://git@github.com/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
 		{"ssh://git@github.com:22/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
