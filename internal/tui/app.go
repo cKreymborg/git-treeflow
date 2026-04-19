@@ -22,6 +22,17 @@ const (
 	viewPrune
 )
 
+// repoNamePlacement controls where the repo name appears on the home screen.
+// Flip repoNameDisplayPlacement to try the alternative layout.
+type repoNamePlacement int
+
+const (
+	repoNameInlineTitle repoNamePlacement = iota
+	repoNameDedicatedLine
+)
+
+const repoNameDisplayPlacement = repoNameInlineTitle
+
 type AppModel struct {
 	view       viewState
 	list       listModel
@@ -33,6 +44,7 @@ type AppModel struct {
 	width      int
 	height     int
 	repoRoot   string
+	repoName   string
 	cwd        string
 	cfg        config.Config
 	version    string
@@ -42,10 +54,12 @@ type AppModel struct {
 }
 
 func NewApp(repoRoot, cwd, version string, hasWrapper bool, cfg config.Config) AppModel {
+	repoName, _ := gitpkg.RepoDisplayName(repoRoot)
 	return AppModel{
 		view:       viewList,
 		list:       newListModel(repoRoot),
 		repoRoot:   repoRoot,
+		repoName:   repoName,
 		cwd:        cwd,
 		version:    version,
 		hasWrapper: hasWrapper,
@@ -229,7 +243,7 @@ func (m AppModel) View() string {
 		switch m.view {
 		case viewList:
 			content = m.list.View(m.panelInnerWidth())
-			title = "Existing Worktrees"
+			title = m.listTitle()
 			footer = []footerKey{
 				{"enter", "switch"}, {"c", "create"}, {"d", "delete"},
 				{"?", "help"}, {"q", "quit"},
@@ -263,6 +277,9 @@ func (m AppModel) View() string {
 	if m.view == viewList && !m.showHelp {
 		versionLine := dimStyle.Render("  v" + m.version)
 		sections = append(sections, "", renderLogo(), versionLine, "")
+		if repoLine := m.renderRepoNameLine(pw); repoLine != "" {
+			sections = append(sections, repoLine, "")
+		}
 	} else {
 		sections = append(sections, "")
 	}
@@ -310,6 +327,39 @@ func (m AppModel) helpContent() string {
 		result += line
 	}
 	return result
+}
+
+// listTitle returns the home-panel title, optionally annotated with the repo name.
+func (m AppModel) listTitle() string {
+	const base = "Existing Worktrees"
+	if m.repoName == "" || repoNameDisplayPlacement != repoNameInlineTitle {
+		return base
+	}
+	// Panel title sits inside "╭─ <title> ──╮" — budget = panelWidth - 5 - 1
+	// (borders + gaps + at least one trailing dash).
+	budget := m.panelWidth() - 6
+	separator := " — "
+	prefix := base + separator
+	remaining := budget - lipgloss.Width(prefix)
+	if remaining < 2 {
+		return base
+	}
+	name := truncateTail(m.repoName, remaining)
+	return prefix + name
+}
+
+// renderRepoNameLine renders the repo name as a standalone line above the
+// panel. Returns "" when the inline-title placement is active or no name is known.
+func (m AppModel) renderRepoNameLine(panelWidth int) string {
+	if m.repoName == "" || repoNameDisplayPlacement != repoNameDedicatedLine {
+		return ""
+	}
+	budget := panelWidth - 4
+	if budget < 2 {
+		return ""
+	}
+	name := truncateTail(m.repoName, budget)
+	return accentStyle.Render("  " + name)
 }
 
 func (m AppModel) panelWidth() int {

@@ -811,6 +811,35 @@ func addOriginAndFetch(t *testing.T, dir, remote string) {
 	}
 }
 
+func TestParseRepoSlug(t *testing.T) {
+	cases := []struct {
+		url  string
+		want string
+	}{
+		{"git@github.com:ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"git@github.com:ckreymborg/git-treeflow", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow.git/", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow/", "ckreymborg/git-treeflow"},
+		{"https://github.com/ckreymborg/git-treeflow", "ckreymborg/git-treeflow"},
+		{"ssh://git@github.com/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"ssh://git@github.com:22/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"https://user:token@github.com/ckreymborg/git-treeflow.git", "ckreymborg/git-treeflow"},
+		{"https://gitlab.example.com/group/sub/repo.git", "sub/repo"},
+		{"  https://github.com/org/repo.git  ", "org/repo"},
+		{"", ""},
+		{"not-a-url", ""},
+		{"git@github.com:no-slash", ""},
+		{"https://github.com/only-one", ""},
+		{"https://github.com/", ""},
+	}
+	for _, c := range cases {
+		if got := ParseRepoSlug(c.url); got != c.want {
+			t.Errorf("ParseRepoSlug(%q) = %q, want %q", c.url, got, c.want)
+		}
+	}
+}
+
 func TestListRemoteBranches_SortedByCommitterDate(t *testing.T) {
 	dir := setupTestRepo(t)
 	remote := setupRemoteWithBranches(t, []remoteBranch{
@@ -955,5 +984,62 @@ func TestListRemoteBranches_NoDefaultBranchSkipsPin(t *testing.T) {
 	if branches[0] != "origin/branch-new" {
 		t.Errorf("expected origin/branch-new at index 0 (most recent, no pin), got %q (full list %v)",
 			branches[0], branches)
+	}
+}
+
+func TestRemoteOriginURL_NoRemote(t *testing.T) {
+	dir := setupTestRepo(t)
+	url, err := RemoteOriginURL(dir)
+	if err != nil {
+		t.Fatalf("RemoteOriginURL: %v", err)
+	}
+	if url != "" {
+		t.Errorf("RemoteOriginURL with no origin = %q, want empty", url)
+	}
+}
+
+func TestRemoteOriginURL_WithRemote(t *testing.T) {
+	dir := setupTestRepo(t)
+	const want = "git@github.com:ckreymborg/git-treeflow.git"
+	cmd := exec.Command("git", "remote", "add", "origin", want)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("remote add: %v\n%s", err, out)
+	}
+
+	url, err := RemoteOriginURL(dir)
+	if err != nil {
+		t.Fatalf("RemoteOriginURL: %v", err)
+	}
+	if url != want {
+		t.Errorf("RemoteOriginURL = %q, want %q", url, want)
+	}
+}
+
+func TestRepoDisplayName_Fallback(t *testing.T) {
+	dir := setupTestRepo(t)
+	name, err := RepoDisplayName(dir)
+	if err != nil {
+		t.Fatalf("RepoDisplayName: %v", err)
+	}
+	if name != filepath.Base(dir) {
+		t.Errorf("RepoDisplayName without remote = %q, want basename %q", name, filepath.Base(dir))
+	}
+}
+
+func TestRepoDisplayName_FromRemote(t *testing.T) {
+	dir := setupTestRepo(t)
+	cmd := exec.Command("git", "remote", "add", "origin", "https://github.com/ckreymborg/git-treeflow.git")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("remote add: %v\n%s", err, out)
+	}
+
+	name, err := RepoDisplayName(dir)
+	if err != nil {
+		t.Fatalf("RepoDisplayName: %v", err)
+	}
+	if name != "ckreymborg/git-treeflow" {
+		t.Errorf("RepoDisplayName = %q, want %q", name, "ckreymborg/git-treeflow")
 	}
 }
