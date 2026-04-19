@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0
+
+- Sort remote branches by recency and pin the default branch to the top (#8)
+- Show the current repo name on the home screen (#9)
+- Add fast-mode worktree creation shortcut (`f`) that skips prompts (#10)
+
 ## v0.3.0
 
 - Default new branches to the repo's main branch with an override option (#5)
